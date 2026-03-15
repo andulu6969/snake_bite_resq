@@ -36,6 +36,18 @@ dependencies:
   cupertino_icons: ^1.0.8
   http: ^1.6.0
   curved_navigation_bar: ^1.0.6
+  provider: ^6.1.5+1
+
+  shared_preferences: ^2.5.4
+  url_launcher: ^6.3.2
+  permission_handler: ^12.0.1
+  intl: ^0.20.2
+  path_provider: ^2.1.5
+  path: ^1.9.1
+  geolocator: ^14.0.2
+  google_fonts: ^8.0.2
+  shimmer: ^3.0.0
+  fl_chart: ^1.1.1
 
 dev_dependencies:
   flutter_test:
@@ -62,6 +74,7 @@ flutter:
   # To add assets to your application, add an assets section, like this:
   assets:
   - assets/
+  - assets/infographics/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

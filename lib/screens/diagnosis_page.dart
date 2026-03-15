@@ -20,6 +20,7 @@ class _DiagnosisPageState extends State<DiagnosisPage> {
 
   // Clinical Inputs
   String? _snakeIdentified = 'No';
+  String? _identifiedSpecies;
   String? _wbctResult;
   String? _urineColor;
   String? _ptosis;
@@ -227,9 +228,14 @@ class _DiagnosisPageState extends State<DiagnosisPage> {
                       ),
                       child: ElevatedButton.icon(
                         onPressed: () {
+                          // Capture context-dependent refs before any await
+                          final messenger = ScaffoldMessenger.of(context);
+                          final navigator = Navigator.of(context);
+
                           // 1. Run the Logic
                           final outcome = DiagnosisLogic.evaluate(
                             snakeIdentified: _snakeIdentified,
+                            identifiedSpecies: _identifiedSpecies,
                             bleeding: _bleeding,
                             bruises: _bruises,
                             musclePain: _musclePain,
@@ -238,9 +244,12 @@ class _DiagnosisPageState extends State<DiagnosisPage> {
                             ptosis: _ptosis,
                             urineColor: _urineColor,
                             wbctResult: _wbctResult,
+                            neostigmine: _neostigmine,
                           );
 
-                          ScaffoldMessenger.of(context).showSnackBar(
+                          if (!mounted) return;
+
+                          messenger.showSnackBar(
                             SnackBar(
                               content: Text("Analyzing Clinical Rules..."),
                               backgroundColor: Colors.teal.shade800,
@@ -249,8 +258,8 @@ class _DiagnosisPageState extends State<DiagnosisPage> {
                           );
 
                           Future.delayed(const Duration(milliseconds: 800), () {
-                            Navigator.push(
-                              context,
+                            if (!mounted) return;
+                            navigator.push(
                               MaterialPageRoute(
                                 builder: (context) => DiagnosisResultPage(
                                   patientId: _patientIdController.text,
@@ -264,9 +273,9 @@ class _DiagnosisPageState extends State<DiagnosisPage> {
                         label: const Text(
                           "RUN DIAGNOSIS PROTOCOL",
                           style: TextStyle(
-                            fontSize: 20, // Bigger font
+                            fontSize: 18, // Bigger font
                             fontWeight: FontWeight.bold,
-                            letterSpacing: 1.5,
+                            letterSpacing: 1.2,
                           ),
                         ),
                         style: ElevatedButton.styleFrom(
@@ -289,8 +298,87 @@ class _DiagnosisPageState extends State<DiagnosisPage> {
     );
   }
 
-  // --- WIDGET BUILDERS ---
+  void _resetFields() {
+    setState(() {
+      _biteTime = DateTime.now().subtract(const Duration(minutes: 45));
+      _updateDuration();
+      _snakeIdentified = 'No';
+      _identifiedSpecies = null;
+      _wbctResult = null;
+      _urineColor = null;
+      _ptosis = null;
+      _swelling = null;
+      _necrosis = null;
+      _musclePain = null;
+      _bleeding = null;
+      _bruises = null;
+      _neostigmine = null;
+    });
+  }
 
+  Future<void> _selectBiteTime(BuildContext context) async {
+    final DateTime? pickedDate = await showDatePicker(
+      context: context,
+      initialDate: _biteTime,
+      firstDate: DateTime.now().subtract(const Duration(days: 30)),
+      lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: ThemeData.light().copyWith(
+            colorScheme: ColorScheme.light(
+              primary: Colors.orange.shade800,
+              onPrimary: Colors.white,
+              onSurface: Colors.orange.shade900,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (pickedDate == null) return;
+    if (!context.mounted) return;
+
+    final TimeOfDay? pickedTime = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(_biteTime),
+      builder: (context, child) {
+        return Theme(
+          data: ThemeData.light().copyWith(
+            colorScheme: ColorScheme.light(
+              primary: Colors.orange.shade800,
+              onPrimary: Colors.white,
+              onSurface: Colors.orange.shade900,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (pickedTime != null) {
+      final now = DateTime.now();
+      DateTime newBiteTime = DateTime(
+        pickedDate.year,
+        pickedDate.month,
+        pickedDate.day,
+        pickedTime.hour,
+        pickedTime.minute,
+      );
+
+      // If selected time is in the future, cap it to now
+      if (newBiteTime.isAfter(now)) {
+        newBiteTime = now;
+      }
+
+      setState(() {
+        _biteTime = newBiteTime;
+        _updateDuration();
+      });
+    }
+  }
+
+  // ... (buildHeader implementation updated below)
   Widget _buildHeader() {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -350,62 +438,128 @@ class _DiagnosisPageState extends State<DiagnosisPage> {
               ),
             ),
 
-            const SizedBox(width: 12), // Reduced spacing slightly
+            const SizedBox(width: 8),
             // --- TIMER BOX (Right Side - FIXED OVERFLOW) ---
             Expanded(
               flex: 2,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  vertical: 8,
-                  horizontal: 12,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.orange.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.orange.shade100),
-                ),
-                // CHANGED: Row -> Column (Stacks vertically to prevent overflow)
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      "TIME SINCE BITE",
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: Colors.orange[800],
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.5,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.timer_outlined,
-                          size: 20,
-                          color: Colors.deepOrange,
-                        ),
-                        const SizedBox(width: 6),
-                        // Flexible ensures text shrinks if screen is extremely tiny
-                        Flexible(
-                          child: Text(
-                            _durationSinceBite,
-                            style: const TextStyle(
-                              fontSize: 18,
+              child: InkWell(
+                onTap: () => _selectBiteTime(context),
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 8,
+                    horizontal: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.orange.shade100),
+                  ),
+                  // CHANGED: Row -> Column (Stacks vertically to prevent overflow)
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            "TIME SINCE BITE",
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.orange[800],
                               fontWeight: FontWeight.bold,
-                              color: Colors.deepOrange,
+                              letterSpacing: 0.5,
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
+                          Icon(
+                            Icons.edit_outlined,
+                            size: 12,
+                            color: Colors.orange[800],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.timer_outlined,
+                            size: 20,
+                            color: Colors.deepOrange,
+                          ),
+                          const SizedBox(width: 6),
+                          // Flexible ensures text shrinks if screen is extremely tiny
+                          Flexible(
+                            child: Text(
+                              _durationSinceBite,
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.deepOrange,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            // --- RESET BUTTON ---
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.red.shade100),
+              ),
+              child: IconButton(
+                onPressed: () {
+                  showDialog(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text("Reset Diagnosis"),
+                      content: const Text(
+                        "Are you sure you want to clear all entered symptoms and lab results?",
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text(
+                            "Cancel",
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                        ),
+                        ElevatedButton(
+                          onPressed: () {
+                            _resetFields();
+                            Navigator.pop(context);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text("Diagnosis fields reset."),
+                                duration: Duration(seconds: 1),
+                              ),
+                            );
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red.shade400,
+                          ),
+                          child: const Text(
+                            "Reset",
+                            style: TextStyle(color: Colors.white),
+                          ),
                         ),
                       ],
                     ),
-                  ],
-                ),
+                  );
+                },
+                icon: Icon(Icons.refresh_rounded, color: Colors.red.shade700),
+                tooltip: "Reset Diagnosis",
               ),
             ),
           ],

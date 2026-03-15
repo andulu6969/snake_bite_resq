@@ -1,49 +1,87 @@
 <?php
+/**
+ * get_next_patient_id.php
+ * Returns the next patient ID for this hospital unit in the current year.
+ *
+ * New format: {HOSP_CODE}-{YY}-{XXXX}
+ *   HOSP_CODE = extracted from unit_id (e.g. "KDH-HSB-01" → "HSB")
+ *   YY        = 2-digit current year (e.g. 26)
+ *   XXXX      = zero-padded count of patients for this hospital in this year
+ *
+ * Examples:
+ *   KDH-HSB-01  → HSB-26-0007
+ *   KDH-HSAH-01 → HSAH-26-0003
+ *   KDH-HKU-01  → HKU-26-0001
+ *
+ * Query params:
+ *   ?unit_id=KDH-HSB-01
+ */
+
 header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Headers: Content-Type");
 header("Content-Type: application/json");
 
-$conn = new mysqli("localhost", "root", "", "snake_bite_db");
+require_once 'db_connect.php';
 
-if ($conn->connect_error) {
-    die(json_encode(["error" => "Connection failed"]));
+$unit_id = isset($_GET['unit_id']) ? trim($_GET['unit_id']) : '';
+$currentYear = date("y"); // 2-digit year
+
+// --- Extract hospital code from unit_id ---
+// Pattern: KDH-{CODE}-{NUM}  e.g. KDH-HSB-01 → HSB
+//                              or  KDH-HSAH-01 → HSAH
+function extractHospCode(string $unit_id): string
+{
+    $parts = explode('-', $unit_id);
+    // parts[0]=KDH, parts[1]=HOSP code, parts[2]=unit number
+    if (count($parts) >= 3) {
+        // Strip leading 'H' from abbreviated codes like HHSB, keep HSAH etc. as-is
+        return strtoupper($parts[1]);
+    }
+    return 'UNIT';
 }
 
-// 1. Get current 2-digit year (e.g., "26" for 2026)
-$currentYear = date("y"); 
+if (empty($unit_id)) {
+    // Fallback: generic format
+    echo json_encode(["next_id" => "KDH-$currentYear-0001"]);
+    $conn->close();
+    exit();
+}
 
-// 2. Fetch the very last patient ID recorded
-$sql = "SELECT patient_id FROM patients ORDER BY id DESC LIMIT 1";
-$result = $conn->query($sql);
+$hospCode = extractHospCode($unit_id);
 
-// Default fallback (First patient of the current year)
-$nextId = "KDH-ER-" . $currentYear . "-0001";
+// Pattern matches IDs like "HSB-26-%" for this hospital+year
+$prefix = "$hospCode-$currentYear-";
+$pattern = "$prefix%";
 
-if ($result->num_rows > 0) {
-    $row = $result->fetch_assoc();
-    $lastId = $row['patient_id'];
-    
-    // Expected format: KDH-ER-YY-XXXX
-    // Explode splits the string by "-"
-    $parts = explode('-', $lastId);
-    
-    // Safety check: Ensure ID has 4 parts
-    if (count($parts) == 4) {
-        $dbYear = $parts[2];      // The year part from DB (e.g., "25")
-        $dbSequence = intval($parts[3]); // The number part (e.g., 618)
-        
-        if ($dbYear === $currentYear) {
-            // SAME YEAR: Just increment the number
-            $newSequence = $dbSequence + 1;
-        } else {
-            // NEW YEAR DETECTED: Reset sequence to 1
-            $newSequence = 1;
-        }
-        
-        // Build the new ID
-        // str_pad adds zeros to the left (e.g., 1 becomes 0001)
-        $nextId = "KDH-ER-" . $currentYear . "-" . str_pad($newSequence, 4, "0", STR_PAD_LEFT);
-    }
+// Count existing records for this unit in this year for a reliable sequence
+$stmt = $conn->prepare(
+    "SELECT COUNT(*) AS cnt
+     FROM patients
+     WHERE unit_id = ? AND YEAR(recorded_at) = YEAR(CURDATE())"
+);
+$stmt->bind_param("s", $unit_id);
+$stmt->execute();
+$row = $stmt->get_result()->fetch_assoc();
+$nextSeq = ((int)$row['cnt']) + 1;
+$stmt->close();
+
+// Double-check: also ensure the generated ID isn't already taken (race condition safety)
+$nextId = $prefix . str_pad($nextSeq, 4, "0", STR_PAD_LEFT);
+$checkStmt = $conn->prepare("SELECT id FROM patients WHERE patient_id = ? LIMIT 1");
+$checkStmt->bind_param("s", $nextId);
+$checkStmt->execute();
+$exists = $checkStmt->get_result()->num_rows > 0;
+$checkStmt->close();
+
+// If collision, increment until clear
+while ($exists) {
+    $nextSeq++;
+    $nextId = $prefix . str_pad($nextSeq, 4, "0", STR_PAD_LEFT);
+    $checkStmt = $conn->prepare("SELECT id FROM patients WHERE patient_id = ? LIMIT 1");
+    $checkStmt->bind_param("s", $nextId);
+    $checkStmt->execute();
+    $exists = $checkStmt->get_result()->num_rows > 0;
+    $checkStmt->close();
 }
 
 echo json_encode(["next_id" => $nextId]);

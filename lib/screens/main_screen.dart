@@ -4,6 +4,8 @@ import 'package:snake_bite_resq/screens/diagnosis_page.dart';
 import 'package:snake_bite_resq/screens/education_page.dart';
 import 'package:snake_bite_resq/screens/home_page.dart';
 
+import 'package:snake_bite_resq/widgets/gradient_background.dart';
+
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
 
@@ -24,66 +26,63 @@ class _MainScreenState extends State<MainScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // 1. Set the background color of the SCAFFOLD to match your pages.
-      // This prevents white flashes during transitions.
-      backgroundColor: Colors.grey[50],
-
+      // 1. Transparent Scaffold Background to show Gradient if placed here (or handled by body)
+      // Actually, we want the GradientBackground to BE the body.
+      backgroundColor: Colors.transparent, // Important!
       // 2. extendBody: true makes the nav bar float over the content.
-      // We will fix the "transparency" issue by setting the nav bar's background color manually below.
       extendBody: true,
 
-      body: _pages[_selectedIndex],
+      body: GradientBackground(child: _pages[_selectedIndex]),
 
       // --- CURVED NAVIGATION BAR ---
       bottomNavigationBar: CurvedNavigationBar(
         index: _selectedIndex,
-        height: 60.0,
+        height: 65.0,
 
-        // --- KEY FIX: MATCHING COLORS ---
-        // 'color': The color of the bar itself (White).
         color: Colors.white,
-
-        // 'buttonBackgroundColor': The floating bubble (Teal).
-        buttonBackgroundColor: Colors.teal,
-
-        // 'backgroundColor': The color BEHIND the curve.
-        // CHANGED from transparent to Colors.grey[50].
-        // This hides the scrolling text behind the bar while keeping the curve effect!
-        backgroundColor: Colors.grey.shade50,
+        buttonBackgroundColor: Colors.blue.shade700,
+        backgroundColor: Colors.transparent,
 
         animationCurve: Curves.easeInOutCubic,
         animationDuration: const Duration(milliseconds: 350),
 
         items: <Widget>[
-          // ICON 1: Dashboard
-          Icon(
-            Icons.grid_view_rounded,
-            size: 28,
-            color: _selectedIndex == 0 ? Colors.white : Colors.grey.shade400,
-          ),
-
-          // ICON 2: Diagnose (Middle)
-          Icon(
+          _navItem(Icons.grid_view_rounded, 'Dashboard', _selectedIndex == 0),
+          _navItem(
             Icons.monitor_heart_outlined,
-            size: 28,
-            color: _selectedIndex == 1 ? Colors.white : Colors.grey.shade400,
+            'Diagnose',
+            _selectedIndex == 1,
           ),
-
-          // ICON 3: Education
-          Icon(
-            Icons.menu_book_rounded,
-            size: 28,
-            color: _selectedIndex == 2 ? Colors.white : Colors.grey.shade400,
-          ),
+          _navItem(Icons.menu_book_rounded, 'Resources', _selectedIndex == 2),
         ],
 
-        onTap: (index) {
-          setState(() {
-            _selectedIndex = index;
-          });
-        },
+        onTap: (index) => setState(() => _selectedIndex = index),
         letIndexChange: (index) => true,
       ),
+    );
+  }
+
+  Widget _navItem(IconData icon, String label, bool isActive) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(
+          icon,
+          size: 24,
+          color: isActive ? Colors.white : Colors.blueGrey.shade400,
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 9,
+            color: isActive ? Colors.white : Colors.blueGrey.shade400,
+            fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+            letterSpacing: 0.3,
+          ),
+        ),
+      ],
     );
   }
 }

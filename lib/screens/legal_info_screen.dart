@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:snake_bite_resq/widgets/gradient_background.dart';
+import 'package:snake_bite_resq/widgets/glass_card.dart';
 
 class LegalInfoScreen extends StatelessWidget {
   final String title;
@@ -42,50 +44,74 @@ This application was built to assist in the rapid identification and management 
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        title: Text(
-          title,
-          style: const TextStyle(
-            color: Colors.black,
-            fontWeight: FontWeight.bold,
+    return GradientBackground(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          title: Text(
+            title,
+            style: TextStyle(
+              color: Colors.blueGrey.shade900,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          backgroundColor: Colors.white,
+          elevation: 2,
+          shadowColor: Colors.black12,
+          leading: IconButton(
+            icon: Icon(
+              Icons.arrow_back_ios_new,
+              color: Colors.blueGrey.shade900,
+            ),
+            onPressed: () => Navigator.pop(context),
           ),
         ),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.black),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              _getContent(),
-              style: const TextStyle(
-                fontSize: 16,
-                height: 1.6,
-                color: Colors.black87,
-              ),
-            ),
-            const SizedBox(height: 40),
-            if (title.contains("About"))
-              Center(
-                child: Opacity(
-                  opacity: 0.5,
-                  child: Image.asset(
-                    'assets/logo.png',
-                    height: 80,
-                  ), // Ensure logo exists
+        body: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              GlassCard(
+                padding: const EdgeInsets.all(20),
+                child: Text(
+                  _getContent(),
+                  style: TextStyle(
+                    fontSize: 16,
+                    height: 1.6,
+                    color: Colors.blueGrey.shade800,
+                  ),
                 ),
               ),
-          ],
-        ),
-      ),
-    );
+              const SizedBox(height: 40),
+              if (title.contains("About"))
+                Center(
+                  child: Opacity(
+                    opacity: 0.5,
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.local_hospital_rounded,
+                          size: 72,
+                          color: Colors.blue.shade700,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          "SnakeBiteResQ",
+                          style: TextStyle(
+                            color: Colors.blueGrey.shade900,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ), // Column
+        ), // SingleChildScrollView
+      ), // Scaffold
+    ); // GradientBackground
   }
 }
