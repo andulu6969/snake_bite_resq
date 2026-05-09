@@ -11,6 +11,7 @@ import 'package:snake_bite_resq/screens/hospital_locator_screen.dart';
 import 'package:snake_bite_resq/screens/profile_screen.dart';
 import 'package:snake_bite_resq/screens/case_history_screen.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:snake_bite_resq/utils/responsive_utils.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -231,7 +232,9 @@ class _HomePageState extends State<HomePage>
               onRefresh: dashboardProvider.loadDashboardData,
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                padding: EdgeInsets.symmetric(
+                  horizontal: context.responsive.pagePadding,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -249,9 +252,9 @@ class _HomePageState extends State<HomePage>
                         Text(
                           "Patient Outcomes",
                           style: TextStyle(
-                            fontSize: 18,
+                            fontSize: context.responsive.fontXl,
                             fontWeight: FontWeight.bold,
-                            color: Colors.blueGrey.shade900, // White
+                            color: Colors.blueGrey.shade900,
                           ),
                         ),
                         GlassCard(
@@ -268,7 +271,20 @@ class _HomePageState extends State<HomePage>
                     ),
                     const SizedBox(height: 15),
 
-                    _buildOutcomeStatsCard(stats, isMonthly),
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 400),
+                      transitionBuilder: (child, animation) {
+                        return ScaleTransition(
+                          scale: Tween<double>(begin: 0.95, end: 1.0)
+                              .animate(animation),
+                          child: FadeTransition(
+                            opacity: animation,
+                            child: child,
+                          ),
+                        );
+                      },
+                      child: _buildOutcomeStatsCard(stats, isMonthly),
+                    ),
 
                     const SizedBox(height: 24),
 
@@ -402,7 +418,7 @@ class _HomePageState extends State<HomePage>
                         Text(
                           "Clinical Updates",
                           style: TextStyle(
-                            fontSize: 18,
+                            fontSize: context.responsive.fontXl,
                             fontWeight: FontWeight.bold,
                             color: Colors.blueGrey.shade900,
                           ),
@@ -746,6 +762,7 @@ class _HomePageState extends State<HomePage>
     ];
 
     return GlassCard(
+      key: ValueKey(isMonthly), // KEY CHANGE: Unique key for AnimatedSwitcher
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -782,9 +799,14 @@ class _HomePageState extends State<HomePage>
             ],
           ),
           const SizedBox(height: 40), // More space for tooltips
-          SizedBox(
-            height: 220,
-            child: BarChart(
+          Builder(builder: (context) {
+            final chartHeight = context.responsive.adapt(
+              phone: 220.0,
+              tablet: 300.0,
+            );
+            return SizedBox(
+              height: chartHeight,
+              child: BarChart(
               BarChartData(
                 alignment: BarChartAlignment.spaceEvenly,
                 maxY: maxY,
@@ -871,7 +893,8 @@ class _HomePageState extends State<HomePage>
               duration: const Duration(milliseconds: 600),
               curve: Curves.easeInOutBack,
             ),
-          ),
+          );
+          }),
           if (!hasData)
             Padding(
               padding: const EdgeInsets.only(top: 20),

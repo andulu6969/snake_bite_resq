@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:snake_bite_resq/screens/diagnosis_result_page.dart';
 import 'package:snake_bite_resq/services/api_service.dart';
 import 'package:snake_bite_resq/logic/diagnosis_logic.dart';
+import 'package:snake_bite_resq/utils/responsive_utils.dart';
 
 class DiagnosisPage extends StatefulWidget {
   const DiagnosisPage({super.key});
@@ -66,224 +67,237 @@ class _DiagnosisPageState extends State<DiagnosisPage> {
 
   @override
   Widget build(BuildContext context) {
+    final r = context.responsive;
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: const Color(0xFFEEF2F7), // Distinct blue-grey page bg
       body: SafeArea(
         child: Column(
           children: [
             // --- 1. HEADER ---
-            _buildHeader(),
+            _buildHeader(r),
 
             // --- 2. SCROLLABLE CONTENT ---
             Expanded(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
+                padding: EdgeInsets.fromLTRB(
+                  r.pagePadding, 20, r.pagePadding, 40,
+                ),
                 child: Column(
                   children: [
-                    // THE TWO COLUMNS ROW
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // --- LEFT COLUMN (EASIER / VISIBLE SYMPTOMS) ---
-                        Expanded(
-                          child: Column(
+                    // Single column on phone, two columns on tablet
+                    if (r.isTablet)
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // --- LEFT COLUMN ---
+                          Expanded(
+                            child: Column(
+                              children: [
+                                _buildSectionCard(
+                                  title: "1. General Symptoms",
+                                  icon: Icons.accessibility_new_rounded,
+                                  color: Colors.teal.shade700,
+                                  children: [
+                                    _buildChipSelector("Active Bleeding (Gums/Wound)", ["Yes", "No", "N/A"], _bleeding, (v) => setState(() => _bleeding = v)),
+                                    const Divider(height: 30),
+                                    _buildChipSelector("Bruises / Ecchymosis", ["Yes", "No", "N/A"], _bruises, (v) => setState(() => _bruises = v)),
+                                    const Divider(height: 30),
+                                    _buildChipSelector("Generalized Muscle Pain", ["Yes", "No", "N/A"], _musclePain, (v) => setState(() => _musclePain = v)),
+                                  ],
+                                ),
+                                const SizedBox(height: 20),
+                                _buildSectionCard(
+                                  title: "2. Local Envenomation",
+                                  icon: Icons.healing_rounded,
+                                  color: Colors.orange.shade800,
+                                  children: [
+                                    _buildChipSelector("Rapid Swelling (>½ limb)", ["Yes", "Mild", "None", "N/A"], _swelling, (v) => setState(() => _swelling = v)),
+                                    const Divider(height: 30),
+                                    _buildChipSelector("Necrosis / Gangrene", ["Yes", "No", "N/A"], _necrosis, (v) => setState(() => _necrosis = v)),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 20),
+                          // --- RIGHT COLUMN ---
+                          Expanded(
+                            child: Column(
+                              children: [
+                                _buildSectionCard(
+                                  title: "3. Neurotoxic Signs",
+                                  icon: Icons.visibility_rounded,
+                                  color: Colors.purple.shade700,
+                                  children: [
+                                    _buildChipSelector("Ptosis (Drooping Eyelids)", ["Yes", "No", "N/A"], _ptosis, (v) => setState(() => _ptosis = v)),
+                                  ],
+                                ),
+                                const SizedBox(height: 20),
+                                _buildSectionCard(
+                                  title: "4. Bedside & Lab Tests",
+                                  icon: Icons.science_rounded,
+                                  color: Colors.blue.shade700,
+                                  children: [
+                                    _buildChipSelector("Did user bring the snake?", ["Yes", "No", "N/A"], _snakeIdentified, (v) => setState(() => _snakeIdentified = v)),
+                                    const Divider(height: 30),
+                                    _buildChipSelector("Urine Color", ["Normal", "Dark/Cola", "Red", "N/A"], _urineColor, (v) => setState(() => _urineColor = v)),
+                                    const Divider(height: 30),
+                                    _buildChipSelector("20WBCT (Clotting Test)", ["Clotted (Normal)", "Liquid (>20m)", "N/A"], _wbctResult, (v) => setState(() => _wbctResult = v)),
+                                    const Divider(height: 30),
+                                    _buildChipSelector("Neostigmine Test", ["Positive", "Negative", "N/A"], _neostigmine, (v) => setState(() => _neostigmine = v)),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      )
+                    else
+                      // --- SINGLE COLUMN (PHONE) ---
+                      Column(
+                        children: [
+                          _buildSectionCard(
+                            title: "1. General Symptoms",
+                            icon: Icons.accessibility_new_rounded,
+                            color: Colors.teal.shade700,
                             children: [
-                              // 1. GENERAL SYMPTOMS (Easiest to see)
-                              _buildSectionCard(
-                                title: "1. General Symptoms",
-                                icon: Icons
-                                    .accessibility_new_rounded, // Body icon
-                                color: Colors.teal.shade700,
-                                children: [
-                                  _buildChipSelector(
-                                    "Active Bleeding (Gums/Wound)",
-                                    ["Yes", "No", "N/A"],
-                                    _bleeding,
-                                    (v) => setState(() => _bleeding = v),
-                                  ),
-                                  const Divider(height: 30),
-                                  _buildChipSelector(
-                                    "Bruises / Ecchymosis",
-                                    ["Yes", "No", "N/A"],
-                                    _bruises,
-                                    (v) => setState(() => _bruises = v),
-                                  ),
-                                  const Divider(height: 30),
-                                  _buildChipSelector(
-                                    "Generalized Muscle Pain",
-                                    ["Yes", "No", "N/A"],
-                                    _musclePain,
-                                    (v) => setState(() => _musclePain = v),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 20),
-
-                              // 2. LOCAL ENVENOMATION (Visible at site)
-                              _buildSectionCard(
-                                title: "2. Local Envenomation",
-                                icon: Icons.healing_rounded, // Hand/Limb icon
-                                color: Colors.orange.shade800,
-                                children: [
-                                  _buildChipSelector(
-                                    "Rapid Swelling (>½ limb)",
-                                    ["Yes", "Mild", "None", "N/A"],
-                                    _swelling,
-                                    (v) => setState(() => _swelling = v),
-                                  ),
-                                  const Divider(height: 30),
-                                  _buildChipSelector(
-                                    "Necrosis / Gangrene",
-                                    ["Yes", "No", "N/A"],
-                                    _necrosis,
-                                    (v) => setState(() => _necrosis = v),
-                                  ),
-                                ],
-                              ),
+                              _buildChipSelector("Active Bleeding (Gums/Wound)", ["Yes", "No", "N/A"], _bleeding, (v) => setState(() => _bleeding = v)),
+                              const Divider(height: 30),
+                              _buildChipSelector("Bruises / Ecchymosis", ["Yes", "No", "N/A"], _bruises, (v) => setState(() => _bruises = v)),
+                              const Divider(height: 30),
+                              _buildChipSelector("Generalized Muscle Pain", ["Yes", "No", "N/A"], _musclePain, (v) => setState(() => _musclePain = v)),
                             ],
                           ),
-                        ),
-
-                        const SizedBox(width: 20), // Spacing between columns
-                        // --- RIGHT COLUMN (HARDER / LABS / SPECIFIC CHECKS) ---
-                        Expanded(
-                          child: Column(
+                          const SizedBox(height: 16),
+                          _buildSectionCard(
+                            title: "2. Local Envenomation",
+                            icon: Icons.healing_rounded,
+                            color: Colors.orange.shade800,
                             children: [
-                              // 3. NEUROTOXIC SIGNS (Specific check)
-                              _buildSectionCard(
-                                title: "3. Neurotoxic Signs",
-                                icon: Icons.visibility_rounded, // Eye icon
-                                color: Colors.purple.shade700,
-                                children: [
-                                  _buildChipSelector(
-                                    "Ptosis (Drooping Eyelids)",
-                                    ["Yes", "No", "N/A"],
-                                    _ptosis,
-                                    (v) => setState(() => _ptosis = v),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 20),
-
-                              // 4. BEDSIDE & LAB TESTS (Hardest / Takes time)
-                              _buildSectionCard(
-                                title: "4. Bedside & Lab Tests",
-                                icon: Icons.science_rounded, // Lab icon
-                                color: Colors.blue.shade700,
-                                children: [
-                                  _buildChipSelector(
-                                    "Did user bring the snake?",
-                                    ["Yes", "No", "N/A"],
-                                    _snakeIdentified,
-                                    (v) => setState(() => _snakeIdentified = v),
-                                  ),
-                                  const Divider(height: 30),
-                                  _buildChipSelector(
-                                    "Urine Color",
-                                    ["Normal", "Dark/Cola", "Red", "N/A"],
-                                    _urineColor,
-                                    (v) => setState(() => _urineColor = v),
-                                  ),
-                                  const Divider(height: 30),
-                                  _buildChipSelector(
-                                    "20WBCT (Clotting Test)",
-                                    [
-                                      "Clotted (Normal)",
-                                      "Liquid (>20m)",
-                                      "N/A",
-                                    ],
-                                    _wbctResult,
-                                    (v) => setState(() => _wbctResult = v),
-                                  ),
-                                  const Divider(height: 30),
-                                  _buildChipSelector(
-                                    "Neostigmine Test",
-                                    ["Positive", "Negative", "N/A"],
-                                    _neostigmine,
-                                    (v) => setState(() => _neostigmine = v),
-                                  ),
-                                ],
-                              ),
+                              _buildChipSelector("Rapid Swelling (>½ limb)", ["Yes", "Mild", "None", "N/A"], _swelling, (v) => setState(() => _swelling = v)),
+                              const Divider(height: 30),
+                              _buildChipSelector("Necrosis / Gangrene", ["Yes", "No", "N/A"], _necrosis, (v) => setState(() => _necrosis = v)),
                             ],
                           ),
-                        ),
-                      ],
-                    ),
+                          const SizedBox(height: 16),
+                          _buildSectionCard(
+                            title: "3. Neurotoxic Signs",
+                            icon: Icons.visibility_rounded,
+                            color: Colors.purple.shade700,
+                            children: [
+                              _buildChipSelector("Ptosis (Drooping Eyelids)", ["Yes", "No", "N/A"], _ptosis, (v) => setState(() => _ptosis = v)),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          _buildSectionCard(
+                            title: "4. Bedside & Lab Tests",
+                            icon: Icons.science_rounded,
+                            color: Colors.blue.shade700,
+                            children: [
+                              _buildChipSelector("Did user bring the snake?", ["Yes", "No", "N/A"], _snakeIdentified, (v) => setState(() => _snakeIdentified = v)),
+                              const Divider(height: 30),
+                              _buildChipSelector("Urine Color", ["Normal", "Dark/Cola", "Red", "N/A"], _urineColor, (v) => setState(() => _urineColor = v)),
+                              const Divider(height: 30),
+                              _buildChipSelector("20WBCT (Clotting Test)", ["Clotted (Normal)", "Liquid (>20m)", "N/A"], _wbctResult, (v) => setState(() => _wbctResult = v)),
+                              const Divider(height: 30),
+                              _buildChipSelector("Neostigmine Test", ["Positive", "Negative", "N/A"], _neostigmine, (v) => setState(() => _neostigmine = v)),
+                            ],
+                          ),
+                        ],
+                      ),
 
                     const SizedBox(height: 40),
 
                     // --- 3. BIG ACTION BUTTON BAR ---
                     Container(
                       width: double.infinity,
-                      height: 70, // Made bigger
+                      height: 70,
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(16),
+                        gradient: LinearGradient(
+                          colors: [
+                            Colors.teal.shade700,
+                            Colors.teal.shade400,
+                          ],
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                        ),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.teal.withOpacity(0.3),
-                            blurRadius: 15,
+                            color: Colors.teal.withValues(alpha: 0.45),
+                            blurRadius: 18,
                             offset: const Offset(0, 8),
                           ),
                         ],
                       ),
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          // Capture context-dependent refs before any await
-                          final messenger = ScaffoldMessenger.of(context);
-                          final navigator = Navigator.of(context);
-
-                          // 1. Run the Logic
-                          final outcome = DiagnosisLogic.evaluate(
-                            snakeIdentified: _snakeIdentified,
-                            identifiedSpecies: _identifiedSpecies,
-                            bleeding: _bleeding,
-                            bruises: _bruises,
-                            musclePain: _musclePain,
-                            swelling: _swelling,
-                            necrosis: _necrosis,
-                            ptosis: _ptosis,
-                            urineColor: _urineColor,
-                            wbctResult: _wbctResult,
-                            neostigmine: _neostigmine,
-                          );
-
-                          if (!mounted) return;
-
-                          messenger.showSnackBar(
-                            SnackBar(
-                              content: Text("Analyzing Clinical Rules..."),
-                              backgroundColor: Colors.teal.shade800,
-                              duration: const Duration(milliseconds: 800),
-                            ),
-                          );
-
-                          Future.delayed(const Duration(milliseconds: 800), () {
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(16),
+                          splashColor: Colors.white.withValues(alpha: 0.15),
+                          highlightColor: Colors.white.withValues(alpha: 0.08),
+                          onTap: () {
+                            final messenger = ScaffoldMessenger.of(context);
+                            final navigator = Navigator.of(context);
+                            final outcome = DiagnosisLogic.evaluate(
+                              snakeIdentified: _snakeIdentified,
+                              identifiedSpecies: _identifiedSpecies,
+                              bleeding: _bleeding,
+                              bruises: _bruises,
+                              musclePain: _musclePain,
+                              swelling: _swelling,
+                              necrosis: _necrosis,
+                              ptosis: _ptosis,
+                              urineColor: _urineColor,
+                              wbctResult: _wbctResult,
+                              neostigmine: _neostigmine,
+                            );
                             if (!mounted) return;
-                            navigator.push(
-                              MaterialPageRoute(
-                                builder: (context) => DiagnosisResultPage(
-                                  patientId: _patientIdController.text,
-                                  outcome: outcome, // PASS THE OUTCOME HERE
+                            messenger.showSnackBar(
+                              SnackBar(
+                                content: const Text(
+                                  "Analyzing Clinical Rules...",
                                 ),
+                                backgroundColor: Colors.teal.shade800,
+                                duration: const Duration(milliseconds: 800),
                               ),
                             );
-                          });
-                        },
-                        icon: const Icon(Icons.analytics_outlined, size: 32),
-                        label: const Text(
-                          "RUN DIAGNOSIS PROTOCOL",
-                          style: TextStyle(
-                            fontSize: 18, // Bigger font
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1.2,
-                          ),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.teal,
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
+                            Future.delayed(
+                              const Duration(milliseconds: 800),
+                              () {
+                                if (!mounted) return;
+                                navigator.push(
+                                  MaterialPageRoute(
+                                    builder: (context) => DiagnosisResultPage(
+                                      patientId: _patientIdController.text,
+                                      outcome: outcome,
+                                    ),
+                                  ),
+                                );
+                              },
+                            );
+                          },
+                          child: const Center(
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.analytics_outlined,
+                                  size: 26,
+                                  color: Colors.white,
+                                ),
+                                SizedBox(width: 10),
+                                Text(
+                                  "RUN DIAGNOSIS PROTOCOL",
+                                  style: TextStyle(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 1.2,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -379,9 +393,12 @@ class _DiagnosisPageState extends State<DiagnosisPage> {
   }
 
   // ... (buildHeader implementation updated below)
-  Widget _buildHeader() {
+  Widget _buildHeader(ResponsiveUtils r) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.symmetric(
+        horizontal: r.pagePadding,
+        vertical: 16,
+      ),
       decoration: BoxDecoration(
         color: Colors.white,
         boxShadow: [
@@ -392,178 +409,162 @@ class _DiagnosisPageState extends State<DiagnosisPage> {
           ),
         ],
       ),
-      child: IntrinsicHeight(
-        // Ensures both boxes are the same height
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // --- PATIENT ID INPUT (Left Side) ---
-            Expanded(
-              flex: 3,
-              child: TextField(
-                controller: _patientIdController,
-                readOnly: true,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.teal,
-                  fontSize: 18,
-                ),
-                decoration: InputDecoration(
-                  labelText: "SYSTEM PATIENT ID",
-                  labelStyle: const TextStyle(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Row 1: Patient ID + Reset button
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _patientIdController,
+                  readOnly: true,
+                  style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    fontSize: 12,
-                  ),
-                  prefixIcon: const Icon(
-                    Icons.qr_code,
                     color: Colors.teal,
-                    size: 24,
+                    fontSize: r.adapt(phone: 16.0, tablet: 20.0),
                   ),
-                  suffixIcon: const Icon(
-                    Icons.lock_outline,
-                    size: 18,
-                    color: Colors.grey,
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  filled: true,
-                  fillColor: Colors.teal.withOpacity(0.05),
-                  isDense: true, // Makes it compact
-                  contentPadding: const EdgeInsets.symmetric(
-                    vertical: 21,
-                    horizontal: 12,
+                  decoration: InputDecoration(
+                    labelText: "SYSTEM PATIENT ID",
+                    labelStyle: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: r.fontXs,
+                    ),
+                    prefixIcon: const Icon(
+                      Icons.qr_code,
+                      color: Colors.teal,
+                      size: 22,
+                    ),
+                    suffixIcon: const Icon(
+                      Icons.lock_outline,
+                      size: 16,
+                      color: Colors.grey,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    filled: true,
+                    fillColor: Colors.teal.withOpacity(0.05),
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(
+                      vertical: 16,
+                      horizontal: 12,
+                    ),
                   ),
                 ),
               ),
-            ),
-
-            const SizedBox(width: 8),
-            // --- TIMER BOX (Right Side - FIXED OVERFLOW) ---
-            Expanded(
-              flex: 2,
-              child: InkWell(
-                onTap: () => _selectBiteTime(context),
-                borderRadius: BorderRadius.circular(12),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 8,
-                    horizontal: 12,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.shade50,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.orange.shade100),
-                  ),
-                  // CHANGED: Row -> Column (Stacks vertically to prevent overflow)
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            "TIME SINCE BITE",
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: Colors.orange[800],
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 0.5,
+              const SizedBox(width: 8),
+              // Reset button
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.red.shade100),
+                ),
+                child: IconButton(
+                  onPressed: () {
+                    showDialog(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text("Reset Diagnosis"),
+                        content: const Text(
+                          "Are you sure you want to clear all entered symptoms and lab results?",
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text(
+                              "Cancel",
+                              style: TextStyle(color: Colors.grey),
                             ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
                           ),
-                          Icon(
-                            Icons.edit_outlined,
-                            size: 12,
-                            color: Colors.orange[800],
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.timer_outlined,
-                            size: 20,
-                            color: Colors.deepOrange,
-                          ),
-                          const SizedBox(width: 6),
-                          // Flexible ensures text shrinks if screen is extremely tiny
-                          Flexible(
-                            child: Text(
-                              _durationSinceBite,
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.deepOrange,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                          ElevatedButton(
+                            onPressed: () {
+                              _resetFields();
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text("Diagnosis fields reset."),
+                                  duration: Duration(seconds: 1),
+                                ),
+                              );
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red.shade400,
+                            ),
+                            child: const Text(
+                              "Reset",
+                              style: TextStyle(color: Colors.white),
                             ),
                           ),
                         ],
                       ),
-                    ],
+                    );
+                  },
+                  icon: Icon(
+                    Icons.refresh_rounded,
+                    color: Colors.red.shade700,
                   ),
+                  tooltip: "Reset Diagnosis",
                 ),
               ),
-            ),
-            const SizedBox(width: 8),
-            // --- RESET BUTTON ---
-            Container(
+            ],
+          ),
+          const SizedBox(height: 10),
+          // Row 2: Timer (full width)
+          InkWell(
+            onTap: () => _selectBiteTime(context),
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
               decoration: BoxDecoration(
-                color: Colors.red.shade50,
+                color: Colors.orange.shade50,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.red.shade100),
+                border: Border.all(color: Colors.orange.shade100),
               ),
-              child: IconButton(
-                onPressed: () {
-                  showDialog(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      title: const Text("Reset Diagnosis"),
-                      content: const Text(
-                        "Are you sure you want to clear all entered symptoms and lab results?",
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text(
-                            "Cancel",
-                            style: TextStyle(color: Colors.grey),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.timer_outlined,
+                    size: 22,
+                    color: Colors.deepOrange,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "TIME SINCE BITE",
+                          style: TextStyle(
+                            fontSize: r.fontXs,
+                            color: Colors.orange[800],
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.5,
                           ),
                         ),
-                        ElevatedButton(
-                          onPressed: () {
-                            _resetFields();
-                            Navigator.pop(context);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text("Diagnosis fields reset."),
-                                duration: Duration(seconds: 1),
-                              ),
-                            );
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red.shade400,
-                          ),
-                          child: const Text(
-                            "Reset",
-                            style: TextStyle(color: Colors.white),
+                        Text(
+                          _durationSinceBite,
+                          style: TextStyle(
+                            fontSize: r.adapt(phone: 18.0, tablet: 22.0),
+                            fontWeight: FontWeight.bold,
+                            color: Colors.deepOrange,
                           ),
                         ),
                       ],
                     ),
-                  );
-                },
-                icon: Icon(Icons.refresh_rounded, color: Colors.red.shade700),
-                tooltip: "Reset Diagnosis",
+                  ),
+                  Icon(
+                    Icons.edit_outlined,
+                    size: 14,
+                    color: Colors.orange[800],
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -574,51 +575,77 @@ class _DiagnosisPageState extends State<DiagnosisPage> {
     required Color color,
     required List<Widget> children,
   }) {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.05),
-            blurRadius: 15,
-            offset: const Offset(0, 5),
-          ),
-        ],
-        border: Border.all(color: Colors.grey.shade100),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Card Title
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(icon, color: color, size: 24),
-              ),
-              const SizedBox(width: 15),
-              Expanded(
-                child: Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                  ), // Bigger Font
-                ),
+    return Stack(
+      children: [
+        // Main card — uniform border so borderRadius works on all platforms
+        Container(
+          padding: const EdgeInsets.fromLTRB(24, 20, 20, 20),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: color.withValues(alpha: 0.25),
+              width: 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: color.withValues(alpha: 0.12),
+                blurRadius: 14,
+                offset: const Offset(0, 5),
               ),
             ],
           ),
-          const SizedBox(height: 24),
-          ...children,
-        ],
-      ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Card Title
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(icon, color: color, size: 24),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: color,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              ...children,
+            ],
+          ),
+        ),
+
+        // Left accent bar — separate Positioned widget
+        Positioned(
+          left: 0,
+          top: 0,
+          bottom: 0,
+          child: Container(
+            width: 5,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(20),
+                bottomLeft: Radius.circular(20),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -634,41 +661,59 @@ class _DiagnosisPageState extends State<DiagnosisPage> {
         Text(
           label,
           style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
             color: Colors.black87,
-          ), // Bigger Font
+          ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         Wrap(
-          spacing: 12,
-          runSpacing: 12,
+          spacing: 8,
+          runSpacing: 8,
           children: options.map((option) {
             final isSelected = currentValue == option;
-            return ChoiceChip(
-              label: Text(option),
-              selected: isSelected,
-              onSelected: (selected) {
-                if (selected) onSelected(option);
-              },
-              selectedColor: _getChipColor(option),
-              backgroundColor: Colors.grey[50],
-              labelStyle: TextStyle(
-                color: isSelected ? Colors.white : Colors.black87,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                fontSize: 14, // Bigger Font for chips
-              ),
-              padding: const EdgeInsets.symmetric(
-                horizontal: 18,
-                vertical: 12,
-              ), // Bigger Touch Area
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-                side: BorderSide(
-                  color: isSelected ? Colors.transparent : Colors.grey.shade300,
+            final chipColor = _getChipColor(option);
+            return GestureDetector(
+              onTap: () => onSelected(option),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 11,
+                ),
+                decoration: BoxDecoration(
+                  color: isSelected ? chipColor : Colors.white,
+                  borderRadius: BorderRadius.circular(30),
+                  border: Border.all(
+                    color: isSelected ? chipColor : Colors.blueGrey.shade200,
+                    width: isSelected ? 0 : 1.5,
+                  ),
+                  boxShadow: isSelected
+                      ? [
+                          BoxShadow(
+                            color: chipColor.withValues(alpha: 0.35),
+                            blurRadius: 8,
+                            offset: const Offset(0, 3),
+                          ),
+                        ]
+                      : [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.06),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                ),
+                child: Text(
+                  option,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                    color: isSelected ? Colors.white : Colors.blueGrey.shade700,
+                    letterSpacing: 0.2,
+                  ),
                 ),
               ),
-              showCheckmark: false,
             );
           }).toList(),
         ),

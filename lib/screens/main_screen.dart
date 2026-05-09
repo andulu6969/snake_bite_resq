@@ -3,7 +3,6 @@ import 'package:curved_navigation_bar/curved_navigation_bar.dart';
 import 'package:snake_bite_resq/screens/diagnosis_page.dart';
 import 'package:snake_bite_resq/screens/education_page.dart';
 import 'package:snake_bite_resq/screens/home_page.dart';
-
 import 'package:snake_bite_resq/widgets/gradient_background.dart';
 
 class MainScreen extends StatefulWidget {
@@ -26,15 +25,11 @@ class _MainScreenState extends State<MainScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // 1. Transparent Scaffold Background to show Gradient if placed here (or handled by body)
-      // Actually, we want the GradientBackground to BE the body.
-      backgroundColor: Colors.transparent, // Important!
-      // 2. extendBody: true makes the nav bar float over the content.
+      backgroundColor: Colors.transparent,
       extendBody: true,
-
       body: GradientBackground(child: _pages[_selectedIndex]),
 
-      // --- CURVED NAVIGATION BAR ---
+      // --- CURVED NAVIGATION BAR (always bottom, all orientations) ---
       bottomNavigationBar: CurvedNavigationBar(
         index: _selectedIndex,
         height: 65.0,

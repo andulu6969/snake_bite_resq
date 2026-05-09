@@ -30,7 +30,7 @@ class DiagnosisLogic {
         icon: 0xe04a, // warning_amber_rounded (CodePoint)
         suspectedSpecies: species,
         confidence: identifiedSpecies != null ? "99% (AI Confirmed)" : "95%",
-        imageAsset: "assets/viper.jpg", // Ensure you have this image
+        imageAsset: "assets/Calloselasma_rhodostoma.png",
         description:
             "Symptoms${identifiedSpecies != null ? " and AI ID" : ""} indicate systemic bleeding and coagulopathy. Immediate antivenom and clotting monitoring required.",
         treatmentSteps: [
@@ -78,7 +78,7 @@ class DiagnosisLogic {
             ? "Likely Cobra (Naja) — Neostigmine Responsive"
             : species,
         confidence: identifiedSpecies != null ? "98% (AI Confirmed)" : "92%",
-        imageAsset: "assets/cobra.jpg",
+        imageAsset: "assets/Naja_sumatrana.png",
         description:
             "Symptoms${identifiedSpecies != null ? " and AI ID" : ""} indicate descending paralysis. High risk of respiratory failure."
             "${neostigminePositive ? " Positive Neostigmine test suggests reversible Cobra envenomation." : ""}",
@@ -133,7 +133,7 @@ class DiagnosisLogic {
         icon: 0xeb3c, // accessibility_new_rounded
         suspectedSpecies: species,
         confidence: identifiedSpecies != null ? "98% (AI Confirmed)" : "88%",
-        imageAsset: "assets/seasnake.jpg",
+        imageAsset: "assets/Bungarus_candidus.png",
         description:
             "Symptoms${identifiedSpecies != null ? " and AI ID" : ""} indicate rhabdomyolysis (muscle breakdown). Risk of Acute Kidney Injury.",
         treatmentSteps: [
@@ -169,8 +169,7 @@ class DiagnosisLogic {
         icon: 0xf7d3, // healing_rounded
         suspectedSpecies: "Likely Spitting Cobra or Pit Viper",
         confidence: "85%",
-        imageAsset:
-            "assets/viper.jpg", // Reusing viper as they cause swelling too
+        imageAsset: "assets/Calloselasma_rhodostoma.png",
         description:
             "Significant tissue damage detected. Risk of compartment syndrome or infection.",
         treatmentSteps: [

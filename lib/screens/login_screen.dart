@@ -4,6 +4,7 @@ import 'package:snake_bite_resq/services/auth_service.dart';
 import 'package:snake_bite_resq/screens/main_screen.dart';
 import 'package:snake_bite_resq/screens/admin/admin_main_screen.dart';
 import 'package:snake_bite_resq/widgets/fade_in_slide.dart'; // Import Custom Animation
+import 'package:snake_bite_resq/utils/responsive_utils.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -69,6 +70,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final r = context.responsive;
     return Scaffold(
       body: Stack(
         children: [
@@ -80,8 +82,8 @@ class _LoginScreenState extends State<LoginScreen> {
             top: -50,
             left: -50,
             child: Container(
-              width: 200,
-              height: 200,
+              width: r.adapt(phone: 200.0, tablet: 300.0),
+              height: r.adapt(phone: 200.0, tablet: 300.0),
               decoration: BoxDecoration(
                 color: Colors.blue.shade700.withValues(alpha: 0.05),
                 shape: BoxShape.circle,
@@ -92,8 +94,8 @@ class _LoginScreenState extends State<LoginScreen> {
             bottom: -30,
             right: -30,
             child: Container(
-              width: 300,
-              height: 300,
+              width: r.adapt(phone: 300.0, tablet: 450.0),
+              height: r.adapt(phone: 300.0, tablet: 450.0),
               decoration: BoxDecoration(
                 color: Colors.teal.shade600.withValues(alpha: 0.03),
                 shape: BoxShape.circle,
@@ -104,18 +106,20 @@ class _LoginScreenState extends State<LoginScreen> {
           // 3. CENTERED LOGIN CARD
           Center(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24.0),
+              padding: EdgeInsets.all(r.pagePadding),
               child: FadeInSlide(
                 duration: const Duration(milliseconds: 800),
                 delay: const Duration(milliseconds: 200),
                 child: Container(
-                  constraints: const BoxConstraints(maxWidth: 400),
-                  padding: const EdgeInsets.all(32.0),
+                  constraints: BoxConstraints(
+                    maxWidth: r.adapt(phone: 400.0, tablet: 520.0),
+                  ),
+                  padding: EdgeInsets.all(r.adapt(phone: 32.0, tablet: 44.0)),
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(
                       alpha: 0.9,
                     ), // Glass-like opacity
-                    borderRadius: BorderRadius.circular(24),
+                    borderRadius: BorderRadius.circular(r.cardRadius),
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withValues(alpha: 0.2),
@@ -131,24 +135,24 @@ class _LoginScreenState extends State<LoginScreen> {
                       children: [
                         // LOGO
                         Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: Colors.blue.shade50,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            Icons.local_hospital_rounded,
-                            size: 48,
-                            color: Colors.blue.shade700,
+                          decoration:
+                              const BoxDecoration(shape: BoxShape.circle),
+                          child: SizedBox(
+                            height: r.adapt(phone: 130.0, tablet: 160.0),
+                            width: r.adapt(phone: 130.0, tablet: 160.0),
+                            child: Image.asset(
+                              'assets/logo.png',
+                              fit: BoxFit.contain,
+                            ),
                           ),
                         ),
-                        const SizedBox(height: 24),
+                        SizedBox(height: r.sectionSpacing),
 
                         // TITLE
                         Text(
                           "SnakeBiteResQ",
                           style: TextStyle(
-                            fontSize: 28,
+                            fontSize: r.adapt(phone: 28.0, tablet: 36.0),
                             fontWeight: FontWeight.bold,
                             color: Colors.blue.shade900,
                             letterSpacing: 1.0,
@@ -158,18 +162,21 @@ class _LoginScreenState extends State<LoginScreen> {
                         Text(
                           "Station Login (Kiosk)",
                           style: TextStyle(
-                            fontSize: 14,
+                            fontSize: r.fontMd,
                             color: Colors.grey[600],
                             fontWeight: FontWeight.w500,
                           ),
                         ),
-                        const SizedBox(height: 40),
+                        SizedBox(
+                          height: r.adapt(phone: 40.0, tablet: 52.0),
+                        ),
 
                         // INPUTS
                         _buildTextField(
                           controller: _unitIdController,
                           label: "Unit / Station ID",
                           icon: Icons.apartment_rounded,
+                          r: r,
                         ),
                         const SizedBox(height: 16),
                         _buildTextField(
@@ -177,13 +184,16 @@ class _LoginScreenState extends State<LoginScreen> {
                           label: "Passcode",
                           icon: Icons.lock_rounded,
                           isPassword: true,
+                          r: r,
                         ),
-                        const SizedBox(height: 32),
+                        SizedBox(
+                          height: r.adapt(phone: 32.0, tablet: 44.0),
+                        ),
 
                         // ACTION BUTTON
                         SizedBox(
                           width: double.infinity,
-                          height: 56,
+                          height: r.adapt(phone: 56.0, tablet: 68.0),
                           child: ElevatedButton(
                             onPressed: _isLoading ? null : _handleLogin,
                             style: ElevatedButton.styleFrom(
@@ -191,7 +201,8 @@ class _LoginScreenState extends State<LoginScreen> {
                               foregroundColor: Colors.white,
                               elevation: 2,
                               shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
+                                borderRadius:
+                                    BorderRadius.circular(r.cardRadius),
                               ),
                             ),
                             child: _isLoading
@@ -203,10 +214,10 @@ class _LoginScreenState extends State<LoginScreen> {
                                       strokeWidth: 2.5,
                                     ),
                                   )
-                                : const Text(
+                                : Text(
                                     "START SHIFT",
                                     style: TextStyle(
-                                      fontSize: 16,
+                                      fontSize: r.fontLg,
                                       fontWeight: FontWeight.bold,
                                       letterSpacing: 1.2,
                                     ),
@@ -230,17 +241,24 @@ class _LoginScreenState extends State<LoginScreen> {
     required String label,
     required IconData icon,
     bool isPassword = false,
+    required ResponsiveUtils r,
   }) {
     return TextFormField(
       controller: controller,
       obscureText: isPassword,
-      style: const TextStyle(
+      style: TextStyle(
         fontWeight: FontWeight.w600,
         color: Colors.black87,
+        fontSize: r.fontMd,
       ), // Forced Black
       decoration: InputDecoration(
         labelText: label,
-        prefixIcon: Icon(icon, color: Colors.blue.shade400),
+        labelStyle: TextStyle(fontSize: r.fontMd),
+        prefixIcon: Icon(
+          icon,
+          color: Colors.blue.shade400,
+          size: r.iconSizeMd,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: Colors.grey.shade300),
@@ -255,9 +273,9 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
         filled: true,
         fillColor: Colors.grey.shade50,
-        contentPadding: const EdgeInsets.symmetric(
+        contentPadding: EdgeInsets.symmetric(
           horizontal: 16,
-          vertical: 16,
+          vertical: r.adapt(phone: 16.0, tablet: 20.0),
         ),
       ),
       validator: (value) => value!.isEmpty ? "Required" : null,

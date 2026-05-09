@@ -32,26 +32,21 @@ class DiagnosisResultPage extends StatelessWidget {
             style: TextStyle(
               color: Colors.blueGrey.shade900,
               fontWeight: FontWeight.bold,
-            ), // Dark text
+            ),
           ),
           backgroundColor: Colors.white,
           elevation: 2,
           shadowColor: Colors.black12,
           centerTitle: true,
-          leading: IconButton(
-            icon: Icon(
-              Icons.close,
-              color: Colors.blueGrey.shade900,
-            ), // Dark icon
-            onPressed: () => Navigator.of(context).pop(),
-          ),
+          automaticallyImplyLeading: false, // removes default back arrow
           actions: [
             IconButton(
               icon: Icon(
-                Icons.print_outlined,
+                Icons.close,
                 color: Colors.blueGrey.shade900,
-              ), // Dark icon
-              onPressed: () {},
+              ),
+              onPressed: () => Navigator.of(context).pop(),
+              tooltip: 'Close',
             ),
           ],
         ),
@@ -184,18 +179,56 @@ class DiagnosisResultPage extends StatelessWidget {
                           const SizedBox(width: 15),
                           Expanded(
                             flex: 2,
-                            child: Container(
-                              // height: 160, // You can keep this to set a minimum, or remove it to let content dictate height.
-                              // Keeping it ensures the row is at least 160px tall.
-                              height: 160,
-                              decoration: BoxDecoration(
-                                color: Colors.grey[200],
-                                borderRadius: BorderRadius.circular(20),
-                                image: DecorationImage(
-                                  image: AssetImage(outcome.imageAsset),
-                                  fit: BoxFit.cover,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                // Snake image
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(16),
+                                  child: outcome.imageAsset.isNotEmpty
+                                      ? Image.asset(
+                                          outcome.imageAsset,
+                                          height: 150,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (_, __, ___) =>
+                                              Container(
+                                                height: 150,
+                                                color: Colors.grey[200],
+                                                child: const Icon(
+                                                  Icons.image_not_supported_outlined,
+                                                  color: Colors.grey,
+                                                ),
+                                              ),
+                                        )
+                                      : Container(
+                                          height: 150,
+                                          decoration: BoxDecoration(
+                                            color: Colors.grey[200],
+                                            borderRadius: BorderRadius.circular(16),
+                                          ),
+                                          child: const Icon(
+                                            Icons.image_outlined,
+                                            color: Colors.grey,
+                                          ),
+                                        ),
                                 ),
-                              ),
+                                // Source attribution
+                                if (outcome.imageAsset.isNotEmpty) ...
+                                  [
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      "Source: Guideline: Management of Snakebite (2017), Ministry of Health Malaysia",
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        fontSize: 8,
+                                        color: Colors.blueGrey.shade400,
+                                        fontStyle: FontStyle.italic,
+                                        height: 1.3,
+                                      ),
+                                    ),
+                                  ],
+                              ],
                             ),
                           ),
                         ],

@@ -5,6 +5,7 @@ import 'package:snake_bite_resq/screens/login_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:snake_bite_resq/services/auth_service.dart';
 import 'package:snake_bite_resq/widgets/gradient_background.dart';
+import 'package:snake_bite_resq/utils/responsive_utils.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -79,55 +80,67 @@ class _SplashScreenState extends State<SplashScreen>
               children: [
                 const Spacer(),
 
-                // --- LOGO SECTION ---
-                SizedBox(
-                  height: 150,
-                  width: 150,
-                  child: Image.asset('assets/logo.png', fit: BoxFit.contain),
-                ),
+                // --- LOGO SECTION (responsive size) ---
+                Builder(builder: (context) {
+                  final r = context.responsive;
+                  final logoSize = (r.wp(0.40)).clamp(200.0, 320.0);
+                  return SizedBox(
+                    height: logoSize,
+                    width: logoSize,
+                    child: Image.asset('assets/logo.png', fit: BoxFit.contain),
+                  );
+                }),
 
                 const SizedBox(height: 30),
 
                 // --- APP NAME ---
-                Text(
-                  "SnakeBiteResQ", // All caps often looks more modern for headers
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold, // Bold for impact
-                    color: Colors.blue.shade800, // Medical professional blue
-                    letterSpacing: 2.0, // Wide spacing adds elegance
-                  ),
-                ),
-
-                const SizedBox(height: 10),
-
-                // Optional Tagline
-                Text(
-                  "Ministry of Health Malaysia",
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.normal,
-                    color: Colors.blueGrey.shade700,
-                    letterSpacing: 1.0,
-                  ),
-                ),
+                Builder(builder: (context) {
+                  final r = context.responsive;
+                  return Column(
+                    children: [
+                      Text(
+                        "SnakeBiteResQ",
+                        style: TextStyle(
+                          fontSize: r.adapt(phone: 32.0, tablet: 42.0),
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue.shade800,
+                          letterSpacing: 2.0,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      // Optional Tagline
+                      Text(
+                        "Ministry of Health Malaysia",
+                        style: TextStyle(
+                          fontSize: r.adapt(phone: 16.0, tablet: 22.0),
+                          fontWeight: FontWeight.normal,
+                          color: Colors.blueGrey.shade700,
+                          letterSpacing: 1.0,
+                        ),
+                      ),
+                    ],
+                  );
+                }),
 
                 const Spacer(),
 
                 // --- SUBTLE PULSING TEXT ---
                 FadeTransition(
                   opacity: _animation,
-                  child: Text(
-                    "TAP SCREEN TO BEGIN",
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blue.shade700,
-                      letterSpacing: 1.5,
-                    ),
-                  ),
+                  child: Builder(builder: (context) {
+                    final r = context.responsive;
+                    return Text(
+                      "TAP SCREEN TO BEGIN",
+                      style: TextStyle(
+                        fontSize: r.adapt(phone: 16.0, tablet: 20.0),
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue.shade700,
+                        letterSpacing: 1.5,
+                      ),
+                    );
+                  }),
                 ),
-                const SizedBox(height: 60), // Space from bottom
+                const SizedBox(height: 60),
               ],
             ),
           ), // SizedBox
