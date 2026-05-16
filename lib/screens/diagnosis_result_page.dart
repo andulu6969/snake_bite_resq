@@ -9,11 +9,17 @@ import 'package:snake_bite_resq/widgets/gradient_background.dart';
 class DiagnosisResultPage extends StatelessWidget {
   final String patientId;
   final DiagnosisOutcome outcome;
+  final String icPassport;
+  final String diagnosedBy;
+  final String hospitalName;
 
   const DiagnosisResultPage({
     super.key,
     required this.patientId,
-    required this.outcome, // Require it
+    required this.outcome,
+    this.icPassport = '',
+    this.diagnosedBy = '',
+    this.hospitalName = '',
   });
   @override
   Widget build(BuildContext context) {
@@ -488,10 +494,13 @@ class DiagnosisResultPage extends StatelessWidget {
         );
 
         bool success = await ApiService.savePatientOutcome(
-          patientId: patientId,
-          species: outcome.suspectedSpecies,
-          severity: outcome.severity,
-          disposition: title,
+          patientId:    patientId,
+          species:      outcome.suspectedSpecies,
+          severity:     outcome.severity,
+          disposition:  title,
+          icPassport:   icPassport.isNotEmpty ? icPassport : null,
+          diagnosedBy:  diagnosedBy.isNotEmpty ? diagnosedBy : null,
+          hospitalName: hospitalName.isNotEmpty ? hospitalName : null,
         );
 
         if (!context.mounted) return;

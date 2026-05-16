@@ -6,6 +6,8 @@ import 'package:snake_bite_resq/screens/login_screen.dart';
 import 'package:snake_bite_resq/screens/admin/admin_overview_page.dart';
 import 'package:snake_bite_resq/screens/admin/admin_hospitals_page.dart';
 import 'package:snake_bite_resq/screens/admin/admin_analytics_page.dart';
+import 'package:snake_bite_resq/screens/admin/admin_doctors_page.dart';
+import 'package:snake_bite_resq/screens/admin/admin_ai_insights_page.dart';
 import 'package:snake_bite_resq/widgets/gradient_background.dart';
 
 class AdminMainScreen extends StatefulWidget {
@@ -22,6 +24,8 @@ class _AdminMainScreenState extends State<AdminMainScreen> {
     AdminOverviewPage(),
     AdminHospitalsPage(),
     AdminAnalyticsPage(),
+    AdminDoctorsPage(),
+    AdminAiInsightsPage(),
   ];
 
   void _handleLogout() async {
@@ -102,6 +106,8 @@ class _AdminMainScreenState extends State<AdminMainScreen> {
             _selectedIndex == 1,
           ),
           _navItem(Icons.insights_rounded, 'Analytics', _selectedIndex == 2),
+          _navItem(Icons.people_alt_rounded, 'Doctors', _selectedIndex == 3),
+          _navItem(Icons.auto_awesome_rounded, 'AI', _selectedIndex == 4),
         ],
         onTap: (index) => setState(() => _selectedIndex = index),
         letIndexChange: (index) => true,

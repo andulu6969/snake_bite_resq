@@ -3,38 +3,53 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:snake_bite_resq/services/offline_cache_service.dart';
 
 class ApiService {
   static String get baseUrl {
     if (kIsWeb) return "http://localhost/snake_bite";
     if (Platform.isAndroid) return "http://10.0.2.2/snake_bite";
-    // iOS simulator uses localhost; real iPhone on same LAN needs the
-    // machine's actual IP, e.g. "http://192.168.x.x/snake_bite".
     return "http://localhost/snake_bite";
   }
 
-  // Helper: read the logged-in unit_id from SharedPreferences
-  static Future<String?> _getUnitId() async {
+  // ── Session helpers ──────────────────────────────────────────────────────────
+
+  static Future<Map<String, String?>> _getSessionFields() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('unitId');
+    return {
+      'unitId':       prefs.getString('unitId'),
+      'hospitalName': prefs.getString('hospitalName'),
+      'fullName':     prefs.getString('fullName'),
+    };
   }
 
-  // 1. Save Patient (with Offline Fallback)
+  // ── 1. Save Patient (offline queue fallback) ─────────────────────────────────
+
   static Future<bool> savePatientOutcome({
     required String patientId,
     required String species,
     required String severity,
     required String disposition,
+    String? icPassport,
+    String? diagnosedBy,
+    String? hospitalName,
+    String? unitId,
   }) async {
-    final unitId = await _getUnitId();
+    final session  = await _getSessionFields();
+    final uid      = unitId      ?? session['unitId']      ?? '';
+    final hospital = hospitalName ?? session['hospitalName'] ?? '';
+    final doctor   = diagnosedBy ?? session['fullName']    ?? '';
 
     final data = {
-      "patient_id": patientId,
-      "unit_id": unitId,
-      "species": species,
-      "severity": severity,
-      "disposition": disposition,
-      "timestamp": DateTime.now().toIso8601String(),
+      "patient_id":    patientId,
+      "unit_id":       uid,
+      "hospital_name": hospital,
+      "species":       species,
+      "severity":      severity,
+      "disposition":   disposition,
+      "ic_passport":   icPassport ?? '',
+      "diagnosed_by":  doctor,
+      "timestamp":     DateTime.now().toIso8601String(),
     };
 
     try {
@@ -47,178 +62,277 @@ class ApiService {
           .timeout(const Duration(seconds: 5));
 
       if (response.statusCode == 200) {
+        await OfflineCacheService.refreshPendingCount();
         return true;
-      } else {
-        await _saveToOfflineQueue(data);
-        return false;
       }
     } catch (e) {
-      debugPrint("Network Error: $e. Saving offline.");
-      await _saveToOfflineQueue(data);
-      return false;
+      debugPrint("Network error saving patient — queuing offline: $e");
     }
+
+    await _enqueueOffline(data);
+    return false;
   }
 
-  // --- OFFLINE SYNC LOGIC ---
-
-  static Future<void> _saveToOfflineQueue(Map<String, dynamic> data) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final List<String> queue = prefs.getStringList('offline_queue') ?? [];
-      queue.add(jsonEncode(data));
-      await prefs.setStringList('offline_queue', queue);
-      debugPrint("Saved to Offline Queue. Total: ${queue.length}");
-    } catch (e) {
-      debugPrint("Error saving offline: $e");
-    }
-  }
+  // ── 2. Offline sync ─────────────────────────────────────────────────────────
 
   static Future<int> syncPendingData() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final List<String> queue = prefs.getStringList('offline_queue') ?? [];
-
+      final queue = prefs.getStringList('offline_queue') ?? [];
       if (queue.isEmpty) return 0;
 
-      debugPrint("Syncing ${queue.length} offline records...");
-      final List<String> remainingQueue = [];
-      int syncedCount = 0;
+      debugPrint('[Sync] Syncing ${queue.length} offline records...');
+      final remaining  = <String>[];
+      int synced = 0;
 
-      for (String jsonStr in queue) {
+      for (final jsonStr in queue) {
         try {
-          final data = jsonDecode(jsonStr);
+          final data     = jsonDecode(jsonStr);
           final response = await http
               .post(
                 Uri.parse("$baseUrl/api/save_patient.php"),
                 headers: {"Content-Type": "application/json"},
-                body: jsonEncode({
-                  "patient_id": data['patient_id'],
-                  "unit_id": data['unit_id'],
-                  "species": data['species'],
-                  "severity": data['severity'],
-                  "disposition": data['disposition'],
-                  "timestamp": data['timestamp'],
-                }),
+                body: jsonEncode(data),
               )
-              .timeout(const Duration(seconds: 5)); // #3: per-request timeout
+              .timeout(const Duration(seconds: 5));
 
           if (response.statusCode == 200) {
-            syncedCount++;
+            synced++;
           } else {
-            remainingQueue.add(jsonStr);
+            remaining.add(jsonStr);
           }
-        } catch (e) {
-          remainingQueue.add(jsonStr); // keep for next sync attempt
+        } catch (_) {
+          remaining.add(jsonStr);
         }
       }
 
-      await prefs.setStringList('offline_queue', remainingQueue);
-      return syncedCount;
+      await prefs.setStringList('offline_queue', remaining);
+      await OfflineCacheService.refreshPendingCount();
+      debugPrint('[Sync] Synced $synced, ${remaining.length} remaining');
+      return synced;
     } catch (e) {
-      debugPrint("Sync Error: $e");
+      debugPrint('[Sync] Error: $e');
       return 0;
     }
   }
 
-  // 2. Get Dashboard Stats (filtered by unit + time period)
+  // ── 3. Dashboard stats (cache on success, serve cache on failure) ────────────
+
   static Future<Map<String, dynamic>> getDashboardStats({
     String filter = "monthly",
     String? unitId,
+    String? hospitalName,
   }) async {
+    final session  = await _getSessionFields();
+    final uid      = unitId      ?? session['unitId']      ?? '';
+    final hospital = hospitalName ?? session['hospitalName'] ?? '';
+
     try {
-      final uid = unitId ?? await _getUnitId() ?? '';
-      final uri = Uri.parse(
-        "$baseUrl/api/get_dashboard_stats.php?filter=$filter&unit_id=${Uri.encodeComponent(uid)}",
-      );
-      final response = await http
-          .get(uri)
-          .timeout(const Duration(seconds: 8)); // #2: timeout added
+      final queryParams = <String, String>{'filter': filter};
+      if (hospital.isNotEmpty) queryParams['hospital_name'] = hospital;
+      if (uid.isNotEmpty)      queryParams['unit_id']       = uid;
+
+      final uri      = Uri.parse("$baseUrl/api/get_dashboard_stats.php")
+          .replace(queryParameters: queryParams);
+      final response = await http.get(uri).timeout(const Duration(seconds: 8));
+
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        // ✅ Cache successful response
+        await OfflineCacheService.saveStats(
+          hospitalName: hospital,
+          filter:       filter,
+          data:         data,
+        );
+        return data;
       }
     } catch (e) {
-      debugPrint("Error fetching stats: $e");
+      debugPrint('[Stats] Network error — trying cache: $e');
     }
-    return {"ICU": 0, "Ward": 0, "Observation": 0, "Discharge": 0, "total": 0};
+
+    // ❌ Network failed → serve cached data
+    final cached = await OfflineCacheService.loadStats(
+      hospitalName: hospital,
+      filter:       filter,
+    );
+    if (cached != null) return cached;
+
+    // No cache exists — return explicit no-cache marker so UI can show appropriate state
+    return {
+      "ICU": 0, "Ward": 0, "Observation": 0, "Discharge": 0, "total": 0,
+      "_source": "no_cache",
+    };
   }
 
-  // 3. Get Recent Patient (scoped to unit)
+  // ── 4. Recent patient (cache on success, serve cache on failure) ─────────────
+
   static Future<Map<String, dynamic>?> getRecentPatient({
+    String? hospitalName,
     String? unitId,
   }) async {
+    final session  = await _getSessionFields();
+    final hospital = hospitalName ?? session['hospitalName'] ?? '';
+    final uid      = unitId      ?? session['unitId']       ?? '';
+
+    // STRICT: never request without a hospital scope
+    if (hospital.isEmpty && uid.isEmpty) return null;
+
     try {
-      final uid = unitId ?? await _getUnitId() ?? '';
-      final uri = Uri.parse(
-        "$baseUrl/api/get_recent_patient.php?unit_id=${Uri.encodeComponent(uid)}",
-      );
-      final response = await http
-          .get(uri)
-          .timeout(const Duration(seconds: 8)); // #2: timeout added
+      final queryParams = <String, String>{};
+      if (hospital.isNotEmpty) {
+        queryParams['hospital_name'] = hospital;
+      } else {
+        queryParams['unit_id'] = uid;
+      }
+
+      final uri      = Uri.parse("$baseUrl/api/get_recent_patient.php")
+          .replace(queryParameters: queryParams);
+      final response = await http.get(uri).timeout(const Duration(seconds: 8));
+
       if (response.statusCode == 200) {
-        final json = jsonDecode(response.body);
-        if (json['status'] == 'success') {
-          return json['data'];
+        final body = jsonDecode(response.body);
+        if (body['status'] == 'success') {
+          final data = Map<String, dynamic>.from(body['data'] as Map);
+          // ✅ Cache successful response
+          await OfflineCacheService.saveRecentPatient(
+            hospitalName: hospital.isNotEmpty ? hospital : uid,
+            data:         data,
+          );
+          return data;
         }
       }
     } catch (e) {
-      debugPrint("Error fetching recent: $e");
+      debugPrint('[Recent] Network error — trying cache: $e');
     }
-    return null;
+
+    // ❌ Network failed → serve cached data
+    final cached = await OfflineCacheService.loadRecentPatient(
+      hospitalName: hospital.isNotEmpty ? hospital : uid,
+    );
+    if (cached != null) return cached;
+
+    // No cache — return sentinel map so home page can show "no cache" state
+    return {"_no_cache": true};
   }
 
-  // 4. Get Next Incremental ID (scoped to unit, generates hospital-prefixed IDs)
-  static Future<String> getNextPatientId({String? unitId}) async {
+  // ── 5. Next patient ID (shared hospital counter, offline fallback) ───────────
+
+  static Future<String> getNextPatientId({
+    String? hospitalName,
+    String? unitId,
+  }) async {
+    final session  = await _getSessionFields();
+    final hospital = hospitalName ?? session['hospitalName'] ?? '';
+    final uid      = unitId      ?? session['unitId']        ?? '';
+
     try {
-      final uid = unitId ?? await _getUnitId() ?? '';
-      final uri = Uri.parse(
-        "$baseUrl/api/get_next_patient_id.php?unit_id=${Uri.encodeComponent(uid)}",
-      );
+      final queryParams = <String, String>{};
+      if (hospital.isNotEmpty) {
+        queryParams['hospital_name'] = hospital;
+      } else if (uid.isNotEmpty) {
+        queryParams['unit_id'] = uid;
+      }
+
+      final uri      = Uri.parse("$baseUrl/api/get_next_patient_id.php")
+          .replace(queryParameters: queryParams);
       final response = await http.get(uri).timeout(const Duration(seconds: 5));
+
       if (response.statusCode == 200) {
-        final json = jsonDecode(response.body);
-        return json['next_id'];
+        final body = jsonDecode(response.body);
+        return body['next_id'] ?? _offlineFallbackId(hospital);
       }
     } catch (e) {
-      debugPrint("Error fetching next ID: $e");
+      debugPrint('[PatientID] Network error — using offline ID: $e');
     }
-    // Offline fallback — timestamp-based temp ID, replaced on sync
-    final ts = DateTime.now().millisecondsSinceEpoch;
-    return "OFFLINE-$ts";
+
+    return _offlineFallbackId(hospital.isNotEmpty ? hospital : uid);
   }
 
-  // 5. Get Case History (paginated, searchable, filterable by severity)
+  static String _offlineFallbackId(String hospitalName) {
+    final year     = DateTime.now().year.toString().substring(2);
+    final stripped = hospitalName.replaceAll(RegExp(r'^Hospital\s+', caseSensitive: false), '');
+    final code     = stripped
+        .split(' ')
+        .where((w) => w.isNotEmpty)
+        .map((w) => w[0].toUpperCase())
+        .join();
+    final ts = DateTime.now().millisecondsSinceEpoch % 10000;
+    return "${code.isEmpty ? 'KDH' : code}-$year-${ts.toString().padLeft(4, '0')}";
+  }
+
+  // ── 6. Case history (cache on success, serve cache on failure) ───────────────
+
   static Future<Map<String, dynamic>> getCaseHistory({
+    String? hospitalName,
     String? unitId,
-    int page = 1,
-    int limit = 15,
-    String search = '',
+    int page       = 1,
+    int limit      = 15,
+    String search  = '',
     String severity = '',
   }) async {
+    final session  = await _getSessionFields();
+    final hospital = hospitalName ?? session['hospitalName'] ?? '';
+    final uid      = unitId      ?? session['unitId']        ?? '';
+
     try {
-      final uid = unitId ?? await _getUnitId() ?? '';
-      final queryParams = {
-        'unit_id': uid,
-        'page': page.toString(),
+      final queryParams = <String, String>{
+        'page':  page.toString(),
         'limit': limit.toString(),
-        if (search.isNotEmpty) 'search': search,
+        if (search.isNotEmpty)   'search':   search,
         if (severity.isNotEmpty) 'severity': severity,
       };
-      final uri = Uri.parse(
-        "$baseUrl/api/get_case_history.php",
-      ).replace(queryParameters: queryParams);
+
+      if (uid == 'ALL') {
+        queryParams['unit_id'] = 'ALL';
+      } else if (hospital.isNotEmpty) {
+        queryParams['hospital_name'] = hospital;
+      } else if (uid.isNotEmpty) {
+        queryParams['unit_id'] = uid;
+      }
+
+      final uri      = Uri.parse("$baseUrl/api/get_case_history.php")
+          .replace(queryParameters: queryParams);
       final response = await http.get(uri).timeout(const Duration(seconds: 8));
+
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        // ✅ Cache first page with no filters (used for offline display)
+        if (page == 1 && search.isEmpty && severity.isEmpty) {
+          await OfflineCacheService.saveCaseHistory(
+            hospitalName: hospital.isNotEmpty ? hospital : uid,
+            data:         data,
+          );
+        }
+        return data;
       }
     } catch (e) {
-      debugPrint("Error fetching case history: $e");
+      debugPrint('[CaseHistory] Network error — trying cache: $e');
     }
-    return {
-      "status": "error",
-      "total": 0,
-      "page": 1,
-      "pages": 1,
-      "records": [],
-    };
+
+    // ❌ Network failed → serve cached history (first page only)
+    if (page == 1 && search.isEmpty && severity.isEmpty) {
+      final cached = await OfflineCacheService.loadCaseHistory(
+        hospitalName: hospital.isNotEmpty ? hospital : uid,
+      );
+      if (cached != null) return cached;
+    }
+
+    return {"status": "offline", "total": 0, "page": 1, "pages": 1, "records": []};
   }
+
+  // ── Private helpers ──────────────────────────────────────────────────────────
+
+  static Future<void> _enqueueOffline(Map<String, dynamic> data) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final queue = prefs.getStringList('offline_queue') ?? [];
+      queue.add(jsonEncode(data));
+      await prefs.setStringList('offline_queue', queue);
+      await OfflineCacheService.refreshPendingCount();
+      debugPrint('[Queue] Offline queue size: ${queue.length}');
+    } catch (e) {
+      debugPrint('[Queue] Error enqueueing: $e');
+    }
+  }
+
 }

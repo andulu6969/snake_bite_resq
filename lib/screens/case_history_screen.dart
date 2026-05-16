@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:shimmer/shimmer.dart'; // #5: Shimmer loading
+import 'package:shimmer/shimmer.dart';
 import 'package:provider/provider.dart';
 import 'package:snake_bite_resq/services/api_service.dart';
 import 'package:snake_bite_resq/services/auth_service.dart';
+import 'package:snake_bite_resq/services/offline_cache_service.dart';
 import 'package:snake_bite_resq/widgets/gradient_background.dart';
 import 'package:snake_bite_resq/widgets/glass_card.dart';
+import 'package:snake_bite_resq/widgets/offline_banner.dart';
 
 class CaseHistoryScreen extends StatefulWidget {
   const CaseHistoryScreen({super.key});
@@ -27,6 +29,8 @@ class _CaseHistoryScreenState extends State<CaseHistoryScreen> {
   String _activeSearch = '';
   String _activeSeverity = '';
   String? _unitId;
+  String? _hospitalName;
+  bool _isOffline = false;
 
   static const int _pageSize = 15;
 
@@ -41,7 +45,9 @@ class _CaseHistoryScreenState extends State<CaseHistoryScreen> {
   @override
   void initState() {
     super.initState();
-    _unitId = Provider.of<AuthService>(context, listen: false).unitId;
+    final auth = Provider.of<AuthService>(context, listen: false);
+    _unitId      = auth.unitId;
+    _hospitalName = auth.hospitalName;
     _loadRecords(reset: true);
     _scrollController.addListener(_onScroll);
   }
@@ -74,7 +80,8 @@ class _CaseHistoryScreenState extends State<CaseHistoryScreen> {
     setState(() => _isLoading = true);
 
     final result = await ApiService.getCaseHistory(
-      unitId: _unitId,
+      hospitalName: _unitId == 'ALL' ? null : _hospitalName,
+      unitId: _unitId == 'ALL' ? 'ALL' : null,
       page: _currentPage,
       limit: _pageSize,
       search: _activeSearch,
@@ -83,15 +90,17 @@ class _CaseHistoryScreenState extends State<CaseHistoryScreen> {
 
     if (!mounted) return;
 
-    final newRecords = List<Map<String, dynamic>>.from(result['records'] ?? []);
-    final totalPages = result['pages'] ?? 1;
+    final newRecords  = List<Map<String, dynamic>>.from(result['records'] ?? []);
+    final totalPages  = result['pages'] ?? 1;
+    final fromCache   = result['status'] == 'offline';
 
     setState(() {
       _records.addAll(newRecords);
       _totalRecords = result['total'] ?? 0;
-      _hasMore = _currentPage < totalPages;
+      _hasMore      = _currentPage < totalPages;
       _currentPage++;
-      _isLoading = false;
+      _isLoading    = false;
+      _isOffline    = fromCache;
     });
   }
 
@@ -154,16 +163,25 @@ class _CaseHistoryScreenState extends State<CaseHistoryScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                'Case History',
-                style: TextStyle(
-                  color: Colors.blueGrey.shade900,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
-                ),
+              Row(
+                children: [
+                  Text(
+                    'Case History',
+                    style: TextStyle(
+                      color: Colors.blueGrey.shade900,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                    ),
+                  ),
+                  if (_isOffline) ...
+                    [
+                      const SizedBox(width: 8),
+                      const OfflineChip(),
+                    ],
+                ],
               ),
               Text(
-                '$_totalRecords record${_totalRecords == 1 ? '' : 's'} · ${_unitId ?? ''}',
+                '$_totalRecords record${_totalRecords == 1 ? '' : 's'} · ${_hospitalName ?? _unitId ?? ''}',
                 style: TextStyle(color: Colors.blueGrey.shade600, fontSize: 11),
               ),
             ],
@@ -171,6 +189,15 @@ class _CaseHistoryScreenState extends State<CaseHistoryScreen> {
         ),
         body: Column(
           children: [
+            // Offline banner — slides in when serving cached records
+            if (_isOffline)
+              OfflineBanner(
+                cacheAgeLabel:  OfflineCacheService.ageLabel(
+                  null, // age shown via cache timestamp if available
+                ),
+                pendingUploads: OfflineCacheService.pendingCount,
+                onRetry: () => _loadRecords(reset: true),
+              ),
             // --- SEARCH BAR ---
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
@@ -341,6 +368,62 @@ class _CaseHistoryScreenState extends State<CaseHistoryScreen> {
   }
 
   Widget _buildEmptyState() {
+    // Offline AND no cached records at all
+    if (_isOffline && _activeSearch.isEmpty && _activeSeverity.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.orange.shade200, width: 1.5),
+                ),
+                child: Icon(Icons.cloud_off_rounded,
+                    size: 48, color: Colors.orange.shade500),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'No Cached Records',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blueGrey.shade700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                "You're offline and no case history\nhas been cached on this device yet.\n\nConnect to the hospital server to\nload and cache records.",
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.blueGrey.shade400,
+                  fontSize: 13,
+                  height: 1.6,
+                ),
+              ),
+              const SizedBox(height: 20),
+              OutlinedButton.icon(
+                onPressed: () => _loadRecords(reset: true),
+                icon: const Icon(Icons.refresh_rounded, size: 16),
+                label: const Text('Retry Connection'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.orange.shade700,
+                  side: BorderSide(color: Colors.orange.shade400),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Normal empty states (online or filtered)
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -348,7 +431,9 @@ class _CaseHistoryScreenState extends State<CaseHistoryScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              Icons.folder_open_outlined,
+              _activeSearch.isNotEmpty || _activeSeverity.isNotEmpty
+                  ? Icons.search_off_rounded
+                  : Icons.folder_open_outlined,
               size: 64,
               color: Colors.blueGrey.shade200,
             ),
@@ -357,7 +442,8 @@ class _CaseHistoryScreenState extends State<CaseHistoryScreen> {
               _activeSearch.isNotEmpty || _activeSeverity.isNotEmpty
                   ? 'No records match your filter'
                   : 'No cases recorded yet',
-              style: TextStyle(color: Colors.blueGrey.shade500, fontSize: 16),
+              style: TextStyle(
+                  color: Colors.blueGrey.shade500, fontSize: 16),
               textAlign: TextAlign.center,
             ),
           ],
@@ -587,8 +673,47 @@ class _CaseHistoryScreenState extends State<CaseHistoryScreen> {
             ),
             const SizedBox(height: 10),
             _detailRow(Icons.access_time, 'Recorded', formattedDate),
+            if ((record['ic_passport'] as String? ?? '').isNotEmpty) ...
+              [
+                const SizedBox(height: 10),
+                _detailRow(Icons.badge_outlined, 'IC / Passport', record['ic_passport'] as String),
+              ],
+            if ((record['diagnosed_by'] as String? ?? '').isNotEmpty) ...
+              [
+                const SizedBox(height: 10),
+                _detailRow(Icons.person_outlined, 'Diagnosed by', record['diagnosed_by'] as String),
+              ],
             const SizedBox(height: 10),
-            _detailRow(Icons.badge_outlined, 'Unit', _unitId ?? '—'),
+            _detailRow(
+              Icons.local_hospital_outlined,
+              'Hospital',
+              (record['hospital_name'] as String? ?? _hospitalName) ?? '—',
+            ),
+            const SizedBox(height: 10),
+            // MOH Validated badge
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.indigo.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.indigo.withValues(alpha: 0.2)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.verified_outlined, color: Colors.indigo.shade400, size: 14),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Validated by Ministry of Health Malaysia',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.indigo.shade600,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),

@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:shimmer/shimmer.dart'; // #5: Shimmer loading
+import 'package:shimmer/shimmer.dart';
 import 'package:provider/provider.dart';
 import 'package:snake_bite_resq/providers/dashboard_provider.dart';
 import 'package:snake_bite_resq/services/api_service.dart';
 import 'package:snake_bite_resq/services/auth_service.dart';
+import 'package:snake_bite_resq/services/offline_cache_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:snake_bite_resq/widgets/glass_card.dart';
+import 'package:snake_bite_resq/widgets/offline_banner.dart';
 import 'package:snake_bite_resq/screens/hospital_locator_screen.dart';
 import 'package:snake_bite_resq/screens/profile_screen.dart';
 import 'package:snake_bite_resq/screens/case_history_screen.dart';
@@ -67,10 +69,15 @@ class _HomePageState extends State<HomePage>
   Widget build(BuildContext context) {
     // Access Provider
     final dashboardProvider = Provider.of<DashboardProvider>(context);
-    final stats = dashboardProvider.stats;
-    final recentPatient = dashboardProvider.recentPatient;
-    final isLoading = dashboardProvider.isLoading;
-    final isMonthly = dashboardProvider.isMonthly;
+    final stats          = dashboardProvider.stats;
+    final recentPatient  = dashboardProvider.recentPatient;
+    final isLoading      = dashboardProvider.isLoading;
+    final isMonthly      = dashboardProvider.isMonthly;
+    final isOffline      = dashboardProvider.isOffline;
+    final cacheAge       = dashboardProvider.cacheAgeLabel;
+    final noCacheRecent  = dashboardProvider.noCacheRecent;
+    final noCacheStats   = dashboardProvider.noCacheOffline;
+    final pendingCount   = OfflineCacheService.pendingCount;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -88,7 +95,7 @@ class _HomePageState extends State<HomePage>
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
-                  Icons.local_hospital,
+                  auth.isAdmin ? Icons.admin_panel_settings : Icons.local_hospital,
                   color: Colors.blue.shade700,
                   size: 20,
                 ),
@@ -100,7 +107,9 @@ class _HomePageState extends State<HomePage>
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      "KIOSK UNIT · ${auth.unitId ?? '—'}",
+                      auth.isAdmin
+                          ? "SYSTEM ADMIN"
+                          : (auth.specialization?.toUpperCase() ?? "DOCTOR"),
                       style: TextStyle(
                         color: Colors.blue.shade700,
                         fontSize: 10,
@@ -109,7 +118,7 @@ class _HomePageState extends State<HomePage>
                       ),
                     ),
                     Text(
-                      auth.hospitalName ?? "SnakeBiteResQ",
+                      auth.fullName ?? auth.hospitalName ?? "SnakeBiteResQ",
                       style: TextStyle(
                         color: Colors.blueGrey.shade900,
                         fontSize: 14,
@@ -119,6 +128,17 @@ class _HomePageState extends State<HomePage>
                       overflow: TextOverflow.ellipsis,
                       maxLines: 1,
                     ),
+                    if (!auth.isAdmin && auth.hospitalName != null)
+                      Text(
+                        auth.hospitalName!,
+                        style: TextStyle(
+                          color: Colors.blueGrey.shade500,
+                          fontSize: 10,
+                          letterSpacing: 0.1,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
                   ],
                 ),
               ),
@@ -227,21 +247,30 @@ class _HomePageState extends State<HomePage>
         label: const Text("EMERGENCY"),
       ),
       body: isLoading
-          ? _buildShimmerDashboard() // #5: Shimmer loader
-          : RefreshIndicator(
-              onRefresh: dashboardProvider.loadDashboardData,
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: EdgeInsets.symmetric(
-                  horizontal: context.responsive.pagePadding,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 20),
+          ? _buildShimmerDashboard()
+          : Column(
+              children: [
+                // Offline banner — slides in when server unreachable
+                if (isOffline)
+                  OfflineBanner(
+                    cacheAgeLabel:   cacheAge,
+                    pendingUploads:  pendingCount,
+                    onRetry: () => dashboardProvider.loadDashboardData(),
+                  ),
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: dashboardProvider.loadDashboardData,
+                    child: SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: context.responsive.pagePadding,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
 
                     // 1. REAL RECENT PATIENT
-                    _buildRecentPatientCard(recentPatient),
+                    _buildRecentPatientCard(recentPatient, noCacheRecent: noCacheRecent),
 
                     const SizedBox(height: 24),
 
@@ -250,7 +279,7 @@ class _HomePageState extends State<HomePage>
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          "Patient Outcomes",
+                          "Patient Statistics",
                           style: TextStyle(
                             fontSize: context.responsive.fontXl,
                             fontWeight: FontWeight.bold,
@@ -275,15 +304,19 @@ class _HomePageState extends State<HomePage>
                       duration: const Duration(milliseconds: 400),
                       transitionBuilder: (child, animation) {
                         return ScaleTransition(
-                          scale: Tween<double>(begin: 0.95, end: 1.0)
-                              .animate(animation),
+                          scale: Tween<double>(
+                            begin: 0.95,
+                            end: 1.0,
+                          ).animate(animation),
                           child: FadeTransition(
                             opacity: animation,
                             child: child,
                           ),
                         );
                       },
-                      child: _buildOutcomeStatsCard(stats, isMonthly),
+                      child: noCacheStats
+                          ? _buildNoCacheStatsCard(isMonthly)
+                          : _buildOutcomeStatsCard(stats, isMonthly),
                     ),
 
                     const SizedBox(height: 24),
@@ -429,9 +462,12 @@ class _HomePageState extends State<HomePage>
                     _buildNewsCarousel(),
 
                     const SizedBox(height: 80), // Space for FAB
-                  ],
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
     );
   }
@@ -538,7 +574,54 @@ class _HomePageState extends State<HomePage>
     );
   }
 
-  Widget _buildRecentPatientCard(Map<String, dynamic>? recentPatient) {
+  Widget _buildRecentPatientCard(
+    Map<String, dynamic>? recentPatient, {
+    bool noCacheRecent = false,
+  }) {
+    // Offline with NO cache — different from "no patients yet"
+    if (noCacheRecent) {
+      return GlassCard(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.orange.shade200, width: 1.5),
+                ),
+                child: Icon(Icons.cloud_off_rounded,
+                    color: Colors.orange.shade600, size: 32),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                "No Cached Data",
+                style: TextStyle(
+                  color: Colors.blueGrey.shade900,
+                  fontSize: 17,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                "You're offline and no local data has\nbeen saved yet. Connect to the server\nto load patient records.",
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.blueGrey.shade500,
+                  fontSize: 12,
+                  height: 1.5,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Online, but hospital has no patients yet
     if (recentPatient == null) {
       return GlassCard(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 30),
@@ -553,11 +636,8 @@ class _HomePageState extends State<HomePage>
                   shape: BoxShape.circle,
                   border: Border.all(color: Colors.blueGrey.shade200, width: 1),
                 ),
-                child: Icon(
-                  Icons.monitor_heart_outlined,
-                  color: Colors.blue.shade600,
-                  size: 32,
-                ),
+                child: Icon(Icons.monitor_heart_outlined,
+                    color: Colors.blue.shade600, size: 32),
               ),
               const SizedBox(height: 16),
               const Text(
@@ -589,10 +669,12 @@ class _HomePageState extends State<HomePage>
     String disposition = recentPatient['disposition'] ?? "Pending";
     String species = recentPatient['species'] ?? "Unknown";
     String time = recentPatient['recorded_at'] ?? "Just now";
+    String diagnosedBy = recentPatient['diagnosed_by'] ?? '';
+    String icPassport = recentPatient['ic_passport'] ?? '';
 
     // Dynamic Styling
     Color accentColor = Colors.blue;
-    Color lightBg = Colors.blue.withValues(alpha: 0.1); // Glassy bg
+    Color lightBg = Colors.blue.withValues(alpha: 0.1);
     if (disposition.contains("Discharge")) {
       accentColor = Colors.greenAccent;
       lightBg = Colors.green.withValues(alpha: 0.1);
@@ -604,112 +686,216 @@ class _HomePageState extends State<HomePage>
       lightBg = Colors.orange.withValues(alpha: 0.1);
     }
 
-    return GlassCard(
-      width: double.infinity,
-      color: accentColor, // TINT THE WHOLE CARD
-      opacity: 0.15, // Visible tint on light background
-      padding: EdgeInsets.zero,
-      child: Container(
-        decoration: BoxDecoration(
-          border: Border(left: BorderSide(color: accentColor, width: 6)),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: lightBg,
-                  shape: BoxShape.circle,
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const CaseHistoryScreen()),
+      ),
+      child: GlassCard(
+        width: double.infinity,
+        color: accentColor,
+        opacity: 0.15,
+        padding: EdgeInsets.zero,
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border(left: BorderSide(color: accentColor, width: 6)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: lightBg,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.assignment_ind_outlined,
+                    color: accentColor,
+                    size: 28,
+                  ),
                 ),
-                child: Icon(
-                  Icons.assignment_ind_outlined,
-                  color: accentColor,
-                  size: 28,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      id,
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.blueGrey.shade900,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      species,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.blueGrey.shade700,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: lightBg,
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                          color: accentColor.withValues(
-                            alpha: 0.5,
-                          ), // More visible border
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        id,
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blueGrey.shade900,
                         ),
-                        boxShadow: [
-                          // #4: Context-Aware Glowing border
-                          BoxShadow(
-                            color: accentColor.withValues(alpha: 0.4),
-                            blurRadius: 8,
-                            spreadRadius: -2,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        species,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.blueGrey.shade700,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (diagnosedBy.isNotEmpty) ...
+                        [
+                          const SizedBox(height: 2),
+                          Row(
+                            children: [
+                              Icon(Icons.person_outline,
+                                  size: 11,
+                                  color: Colors.blueGrey.shade400),
+                              const SizedBox(width: 3),
+                              Expanded(
+                                child: Text(
+                                  diagnosedBy,
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: Colors.blueGrey.shade500,
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
                           ),
                         ],
-                      ),
-                      child: Text(
-                        disposition.toUpperCase(),
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: accentColor,
-                          letterSpacing: 0.5,
+                      if (icPassport.isNotEmpty) ...
+                        [
+                          const SizedBox(height: 1),
+                          Row(
+                            children: [
+                              Icon(Icons.badge_outlined,
+                                  size: 11,
+                                  color: Colors.blueGrey.shade400),
+                              const SizedBox(width: 3),
+                              Text(
+                                icPassport,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.blueGrey.shade500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: lightBg,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: accentColor.withValues(alpha: 0.5),
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: accentColor.withValues(alpha: 0.4),
+                              blurRadius: 8,
+                              spreadRadius: -2,
+                            ),
+                          ],
+                        ),
+                        child: Text(
+                          disposition.toUpperCase(),
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: accentColor,
+                            letterSpacing: 0.5,
+                          ),
                         ),
                       ),
+                    ],
+                  ),
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      time.split(' ')[0],
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.blueGrey.shade500,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Icon(
+                      Icons.arrow_forward_ios_rounded,
+                      size: 16,
+                      color: Colors.blueGrey.shade300,
                     ),
                   ],
                 ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    time.split(' ')[0],
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.blueGrey.shade500,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Icon(
-                    Icons.arrow_forward_ios_rounded,
-                    size: 16,
-                    color: Colors.blueGrey.shade300,
-                  ),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
         ),
+      ),
+    );
+  }
+
+  /// Shown in the chart area when offline AND no cached stats exist yet.
+  Widget _buildNoCacheStatsCard(bool isMonthly) {
+    return GlassCard(
+      padding: const EdgeInsets.all(28),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.bar_chart_outlined,
+              size: 48, color: Colors.blueGrey.shade200),
+          const SizedBox(height: 14),
+          Text(
+            "No Statistics Cached",
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.blueGrey.shade700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            "${isMonthly ? 'Monthly' : 'Yearly'} statistics will appear\nonce you connect to the server.",
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.blueGrey.shade400,
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.orange.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.orange.shade300),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.wifi_off_rounded,
+                    size: 13, color: Colors.orange.shade700),
+                const SizedBox(width: 5),
+                Text(
+                  "Offline — pull down to retry",
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.orange.shade700,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -799,102 +985,104 @@ class _HomePageState extends State<HomePage>
             ],
           ),
           const SizedBox(height: 40), // More space for tooltips
-          Builder(builder: (context) {
-            final chartHeight = context.responsive.adapt(
-              phone: 220.0,
-              tablet: 300.0,
-            );
-            return SizedBox(
-              height: chartHeight,
-              child: BarChart(
-              BarChartData(
-                alignment: BarChartAlignment.spaceEvenly,
-                maxY: maxY,
-                barTouchData: BarTouchData(
-                  enabled: false,
-                  touchTooltipData: BarTouchTooltipData(
-                    getTooltipColor: (_) => Colors.transparent,
-                    tooltipPadding: EdgeInsets.zero,
-                    tooltipMargin: 8,
-                    getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                      return BarTooltipItem(
-                        rod.toY.round().toString(),
-                        TextStyle(
-                          color: rod.color,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                titlesData: FlTitlesData(
-                  show: true,
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 30,
-                      getTitlesWidget: (double value, TitleMeta meta) {
-                        const style = TextStyle(
-                          color: Colors.blueGrey,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        );
-                        Widget text;
-                        switch (value.toInt()) {
-                          case 0:
-                            text = const Text('ICU', style: style);
-                            break;
-                          case 1:
-                            text = const Text('Ward', style: style);
-                            break;
-                          case 2:
-                            text = const Text('Obs.', style: style);
-                            break;
-                          case 3:
-                            text = const Text('Disch.', style: style);
-                            break;
-                          default:
-                            text = const Text('', style: style);
-                            break;
-                        }
-                        return SideTitleWidget(
-                          meta: meta,
-                          space: 10,
-                          child: text,
-                        );
-                      },
+          Builder(
+            builder: (context) {
+              final chartHeight = context.responsive.adapt(
+                phone: 220.0,
+                tablet: 300.0,
+              );
+              return SizedBox(
+                height: chartHeight,
+                child: BarChart(
+                  BarChartData(
+                    alignment: BarChartAlignment.spaceEvenly,
+                    maxY: maxY,
+                    barTouchData: BarTouchData(
+                      enabled: false,
+                      touchTooltipData: BarTouchTooltipData(
+                        getTooltipColor: (_) => Colors.transparent,
+                        tooltipPadding: EdgeInsets.zero,
+                        tooltipMargin: 8,
+                        getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                          return BarTooltipItem(
+                            rod.toY.round().toString(),
+                            TextStyle(
+                              color: rod.color,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          );
+                        },
+                      ),
                     ),
+                    titlesData: FlTitlesData(
+                      show: true,
+                      bottomTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          reservedSize: 30,
+                          getTitlesWidget: (double value, TitleMeta meta) {
+                            const style = TextStyle(
+                              color: Colors.blueGrey,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            );
+                            Widget text;
+                            switch (value.toInt()) {
+                              case 0:
+                                text = const Text('ICU', style: style);
+                                break;
+                              case 1:
+                                text = const Text('Ward', style: style);
+                                break;
+                              case 2:
+                                text = const Text('Obs.', style: style);
+                                break;
+                              case 3:
+                                text = const Text('Disch.', style: style);
+                                break;
+                              default:
+                                text = const Text('', style: style);
+                                break;
+                            }
+                            return SideTitleWidget(
+                              meta: meta,
+                              space: 10,
+                              child: text,
+                            );
+                          },
+                        ),
+                      ),
+                      leftTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: false,
+                        ), // Hide left Y axis
+                      ),
+                      topTitles: AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
+                      ),
+                      rightTitles: AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
+                      ),
+                    ),
+                    gridData: FlGridData(
+                      show: true,
+                      drawVerticalLine: false,
+                      horizontalInterval: maxY > 10 ? (maxY / 5) : 1,
+                      getDrawingHorizontalLine: (value) => FlLine(
+                        color: Colors.blueGrey.withValues(alpha: 0.1),
+                        strokeWidth: 1,
+                      ),
+                    ),
+                    borderData: FlBorderData(show: false),
+                    barGroups: barGroups,
                   ),
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: false,
-                    ), // Hide left Y axis
-                  ),
-                  topTitles: AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  rightTitles: AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
+                  duration: const Duration(milliseconds: 600),
+                  curve: Curves.easeInOutBack,
                 ),
-                gridData: FlGridData(
-                  show: true,
-                  drawVerticalLine: false,
-                  horizontalInterval: maxY > 10 ? (maxY / 5) : 1,
-                  getDrawingHorizontalLine: (value) => FlLine(
-                    color: Colors.blueGrey.withValues(alpha: 0.1),
-                    strokeWidth: 1,
-                  ),
-                ),
-                borderData: FlBorderData(show: false),
-                barGroups: barGroups,
-              ),
-              duration: const Duration(milliseconds: 600),
-              curve: Curves.easeInOutBack,
-            ),
-          );
-          }),
+              );
+            },
+          ),
           if (!hasData)
             Padding(
               padding: const EdgeInsets.only(top: 20),

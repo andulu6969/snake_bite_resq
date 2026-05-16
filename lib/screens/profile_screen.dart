@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:snake_bite_resq/services/api_service.dart';
 import 'package:snake_bite_resq/services/auth_service.dart';
 import 'package:snake_bite_resq/widgets/gradient_background.dart';
 import 'package:snake_bite_resq/widgets/glass_card.dart';
@@ -12,9 +13,14 @@ class ProfileScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final authService = Provider.of<AuthService>(context);
-    final unitInitial = (authService.unitId?.isNotEmpty ?? false)
-        ? authService.unitId![0].toUpperCase()
-        : "S";
+
+    // Safe display name — never null, never empty
+    final rawName    = authService.fullName ?? authService.username ?? '';
+    final displayName = rawName.isNotEmpty ? rawName : 'Doctor';
+    final initial    = displayName.trim().isNotEmpty
+        ? displayName.trim()[0].toUpperCase()
+        : 'D';
+    final isAdmin = authService.isAdmin;
 
     return GradientBackground(
       child: Scaffold(
@@ -30,7 +36,7 @@ class ProfileScreen extends StatelessWidget {
             onPressed: () => Navigator.pop(context),
           ),
           title: Text(
-            "Station Profile",
+            isAdmin ? "Admin Profile" : "Doctor Profile",
             style: TextStyle(
               color: Colors.blueGrey.shade900,
               fontWeight: FontWeight.bold,
@@ -62,7 +68,7 @@ class ProfileScreen extends StatelessWidget {
                         radius: 50,
                         backgroundColor: Colors.blue.shade100,
                         child: Text(
-                          unitInitial,
+                          initial,
                           style: TextStyle(
                             fontSize: 40,
                             fontWeight: FontWeight.bold,
@@ -73,7 +79,7 @@ class ProfileScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      authService.hospitalName ?? "Unknown Hospital",
+                      displayName,
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 20,
@@ -82,8 +88,18 @@ class ProfileScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 4),
+                    if (!isAdmin && (authService.specialization?.isNotEmpty ?? false))
+                      Text(
+                        authService.specialization!,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.blueGrey.shade600,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    const SizedBox(height: 4),
                     Text(
-                      authService.unitId ?? "Unknown Unit",
+                      authService.username ?? '—',
                       style: TextStyle(
                         fontSize: 14,
                         color: Colors.blue.shade700,
@@ -104,7 +120,7 @@ class ProfileScreen extends StatelessWidget {
                         ),
                       ),
                       child: Text(
-                        "● Active Unit",
+                        isAdmin ? "● System Admin" : "● Active Doctor",
                         style: TextStyle(
                           color: Colors.green.shade700,
                           fontSize: 12,
@@ -122,7 +138,7 @@ class ProfileScreen extends StatelessWidget {
               Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  "Station Info",
+                  isAdmin ? "Admin Info" : "Doctor Info",
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -142,10 +158,18 @@ class ProfileScreen extends StatelessWidget {
                     ),
                     const Divider(height: 1, color: Colors.black12),
                     _buildInfoTile(
-                      icon: Icons.badge_outlined,
-                      title: "Unit ID",
-                      value: authService.unitId ?? "—",
+                      icon: Icons.person_outline,
+                      title: "Username",
+                      value: authService.username ?? "—",
                     ),
+                    if (!isAdmin && authService.specialization != null) ...[
+                      const Divider(height: 1, color: Colors.black12),
+                      _buildInfoTile(
+                        icon: Icons.medical_services_outlined,
+                        title: "Specialization",
+                        value: authService.specialization!,
+                      ),
+                    ],
                     const Divider(height: 1, color: Colors.black12),
                     _buildInfoTile(
                       icon: Icons.location_on_outlined,
@@ -154,9 +178,11 @@ class ProfileScreen extends StatelessWidget {
                     ),
                     const Divider(height: 1, color: Colors.black12),
                     _buildInfoTile(
-                      icon: Icons.medical_services_outlined,
-                      title: "System",
-                      value: "SnakeBiteResQ v1.0.0",
+                      icon: Icons.shield_outlined,
+                      title: "Role",
+                      value: isAdmin
+                          ? "System Administrator"
+                          : "Medical Doctor",
                     ),
                   ],
                 ),
@@ -187,11 +213,27 @@ class ProfileScreen extends StatelessWidget {
                       subtitle: "Upload pending cases to server",
                       iconColor: Colors.blue.shade700,
                       onTap: () async {
+                        if (!context.mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
                             content: Text("Syncing offline records..."),
                             backgroundColor: Colors.teal,
                             duration: Duration(seconds: 2),
+                          ),
+                        );
+                        final synced = await ApiService.syncPendingData();
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              synced > 0
+                                  ? "✓ Synced $synced record${synced > 1 ? 's' : ''} to server."
+                                  : "No pending records to sync.",
+                            ),
+                            backgroundColor:
+                                synced > 0 ? Colors.green.shade700 : Colors.blueGrey,
+                            duration: const Duration(seconds: 3),
                           ),
                         );
                       },
@@ -271,7 +313,7 @@ class ProfileScreen extends StatelessWidget {
                           borderRadius: BorderRadius.circular(16),
                         ),
                         title: Text(
-                          "End Shift?",
+                          "Logout?",
                           style: TextStyle(color: Colors.blueGrey.shade900),
                         ),
                         content: Text(
@@ -286,7 +328,7 @@ class ProfileScreen extends StatelessWidget {
                           TextButton(
                             onPressed: () => Navigator.pop(ctx, true),
                             child: const Text(
-                              "End Shift",
+                              "Logout",
                               style: TextStyle(color: Colors.red),
                             ),
                           ),
@@ -319,7 +361,7 @@ class ProfileScreen extends StatelessWidget {
                   ),
                   icon: const Icon(Icons.lock_clock),
                   label: const Text(
-                    "END SHIFT / LOCK",
+                    "Logout",
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,

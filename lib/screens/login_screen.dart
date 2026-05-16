@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:snake_bite_resq/services/auth_service.dart';
 import 'package:snake_bite_resq/screens/main_screen.dart';
 import 'package:snake_bite_resq/screens/admin/admin_main_screen.dart';
+import 'package:snake_bite_resq/screens/register_screen.dart';
 import 'package:snake_bite_resq/widgets/fade_in_slide.dart'; // Import Custom Animation
 import 'package:snake_bite_resq/utils/responsive_utils.dart';
 
@@ -15,14 +16,15 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _unitIdController = TextEditingController();
-  final _passcodeController = TextEditingController();
+  final _usernameController = TextEditingController();
+  final _passwordController = TextEditingController();
+  bool _obscurePassword = true;
   bool _isLoading = false;
 
   @override
   void dispose() {
-    _unitIdController.dispose();
-    _passcodeController.dispose();
+    _usernameController.dispose();
+    _passwordController.dispose();
     super.dispose();
   }
 
@@ -32,8 +34,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
       final authService = Provider.of<AuthService>(context, listen: false);
       final success = await authService.login(
-        _unitIdController.text,
-        _passcodeController.text,
+        _usernameController.text.trim(),
+        _passwordController.text,
       );
 
       if (mounted) {
@@ -46,11 +48,12 @@ class _LoginScreenState extends State<LoginScreen> {
             MaterialPageRoute(builder: (context) => destination),
           );
         } else {
+          final errMsg = authService.lastError ?? 'Invalid username or password.';
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: const Text(
-                'Access Denied. Check Unit ID or Passcode.',
-                style: TextStyle(
+              content: Text(
+                errMsg,
+                style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
                 ),
@@ -135,8 +138,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       children: [
                         // LOGO
                         Container(
-                          decoration:
-                              const BoxDecoration(shape: BoxShape.circle),
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                          ),
                           child: SizedBox(
                             height: r.adapt(phone: 130.0, tablet: 160.0),
                             width: r.adapt(phone: 130.0, tablet: 160.0),
@@ -160,35 +164,33 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          "Station Login (Kiosk)",
+                          "Doctor Portal Login",
                           style: TextStyle(
                             fontSize: r.fontMd,
                             color: Colors.grey[600],
                             fontWeight: FontWeight.w500,
                           ),
                         ),
-                        SizedBox(
-                          height: r.adapt(phone: 40.0, tablet: 52.0),
-                        ),
+                        SizedBox(height: r.adapt(phone: 32.0, tablet: 44.0)),
 
                         // INPUTS
                         _buildTextField(
-                          controller: _unitIdController,
-                          label: "Unit / Station ID",
-                          icon: Icons.apartment_rounded,
+                          controller: _usernameController,
+                          label: "Username",
+                          icon: Icons.person_outline_rounded,
                           r: r,
                         ),
                         const SizedBox(height: 16),
                         _buildTextField(
-                          controller: _passcodeController,
-                          label: "Passcode",
+                          controller: _passwordController,
+                          label: "Password",
                           icon: Icons.lock_rounded,
                           isPassword: true,
                           r: r,
+                          obscure: _obscurePassword,
+                          onToggleObscure: () => setState(() => _obscurePassword = !_obscurePassword),
                         ),
-                        SizedBox(
-                          height: r.adapt(phone: 32.0, tablet: 44.0),
-                        ),
+                        SizedBox(height: r.adapt(phone: 24.0, tablet: 36.0)),
 
                         // ACTION BUTTON
                         SizedBox(
@@ -201,8 +203,9 @@ class _LoginScreenState extends State<LoginScreen> {
                               foregroundColor: Colors.white,
                               elevation: 2,
                               shape: RoundedRectangleBorder(
-                                borderRadius:
-                                    BorderRadius.circular(r.cardRadius),
+                                borderRadius: BorderRadius.circular(
+                                  r.cardRadius,
+                                ),
                               ),
                             ),
                             child: _isLoading
@@ -215,7 +218,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                     ),
                                   )
                                 : Text(
-                                    "START SHIFT",
+                                    "LOGIN",
                                     style: TextStyle(
                                       fontSize: r.fontLg,
                                       fontWeight: FontWeight.bold,
@@ -223,6 +226,38 @@ class _LoginScreenState extends State<LoginScreen> {
                                     ),
                                   ),
                           ),
+                        ),
+
+                        // REGISTER LINK
+                        const SizedBox(height: 20),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              "New to the system? ",
+                              style: TextStyle(
+                                color: Colors.grey.shade600,
+                                fontSize: r.fontSm,
+                              ),
+                            ),
+                            GestureDetector(
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const RegisterScreen(),
+                                ),
+                              ),
+                              child: Text(
+                                "Register Account",
+                                style: TextStyle(
+                                  color: Colors.blue.shade700,
+                                  fontSize: r.fontSm,
+                                  fontWeight: FontWeight.bold,
+                                  decoration: TextDecoration.underline,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -241,24 +276,32 @@ class _LoginScreenState extends State<LoginScreen> {
     required String label,
     required IconData icon,
     bool isPassword = false,
+    bool obscure = true,
+    VoidCallback? onToggleObscure,
     required ResponsiveUtils r,
   }) {
     return TextFormField(
       controller: controller,
-      obscureText: isPassword,
+      obscureText: isPassword ? obscure : false,
       style: TextStyle(
         fontWeight: FontWeight.w600,
         color: Colors.black87,
         fontSize: r.fontMd,
-      ), // Forced Black
+      ),
       decoration: InputDecoration(
         labelText: label,
         labelStyle: TextStyle(fontSize: r.fontMd),
-        prefixIcon: Icon(
-          icon,
-          color: Colors.blue.shade400,
-          size: r.iconSizeMd,
-        ),
+        prefixIcon: Icon(icon, color: Colors.blue.shade400, size: r.iconSizeMd),
+        suffixIcon: isPassword
+            ? IconButton(
+                icon: Icon(
+                  obscure ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                  color: Colors.grey.shade500,
+                  size: r.iconSizeMd,
+                ),
+                onPressed: onToggleObscure,
+              )
+            : null,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: Colors.grey.shade300),

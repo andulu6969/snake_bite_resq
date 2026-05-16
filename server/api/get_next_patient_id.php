@@ -1,20 +1,21 @@
 <?php
 /**
  * get_next_patient_id.php
- * Returns the next patient ID for this hospital unit in the current year.
+ * Returns the next patient ID shared across ALL doctors in the same hospital.
  *
- * New format: {HOSP_CODE}-{YY}-{XXXX}
- *   HOSP_CODE = extracted from unit_id (e.g. "KDH-HSB-01" → "HSB")
+ * Format: {HOSP_CODE}-{YY}-{XXXX}
+ *   HOSP_CODE = abbreviation derived from hospital_name
  *   YY        = 2-digit current year (e.g. 26)
- *   XXXX      = zero-padded count of patients for this hospital in this year
+ *   XXXX      = zero-padded count of all patients in this HOSPITAL this year
  *
  * Examples:
- *   KDH-HSB-01  → HSB-26-0007
- *   KDH-HSAH-01 → HSAH-26-0003
- *   KDH-HKU-01  → HKU-26-0001
+ *   hospital_name = "Hospital Sultanah Bahiyah"  → HSB-26-0007
+ *   hospital_name = "Hospital Sultan Abdul Halim" → HSAH-26-0003
+ *   hospital_name = "Hospital Kulim"              → HKU-26-0001
  *
- * Query params:
- *   ?unit_id=KDH-HSB-01
+ * Query params (one of these must be provided):
+ *   ?hospital_name=Hospital+Sultanah+Bahiyah
+ *   ?unit_id=KDH-HSB-01   (legacy – resolved via doctors/station_units table)
  */
 
 header("Access-Control-Allow-Origin: *");
@@ -23,68 +24,86 @@ header("Content-Type: application/json");
 
 require_once 'db_connect.php';
 
-$unit_id = isset($_GET['unit_id']) ? trim($_GET['unit_id']) : '';
 $currentYear = date("y"); // 2-digit year
 
-// --- Extract hospital code from unit_id ---
-// Pattern: KDH-{CODE}-{NUM}  e.g. KDH-HSB-01 → HSB
-//                              or  KDH-HSAH-01 → HSAH
-function extractHospCode(string $unit_id): string
-{
-    $parts = explode('-', $unit_id);
-    // parts[0]=KDH, parts[1]=HOSP code, parts[2]=unit number
-    if (count($parts) >= 3) {
-        // Strip leading 'H' from abbreviated codes like HHSB, keep HSAH etc. as-is
-        return strtoupper($parts[1]);
+// --- 1. Determine hospital name ---
+$hospitalName = isset($_GET['hospital_name']) ? trim($_GET['hospital_name']) : '';
+$unitId       = isset($_GET['unit_id'])       ? trim($_GET['unit_id'])       : '';
+
+if (empty($hospitalName) && !empty($unitId)) {
+    // Try doctors table first (new system)
+    $st = $conn->prepare("SELECT hospital_name FROM doctors WHERE username = ? LIMIT 1");
+    $st->bind_param("s", $unitId);
+    $st->execute();
+    $row = $st->get_result()->fetch_assoc();
+    $st->close();
+    if ($row) {
+        $hospitalName = $row['hospital_name'];
+    } else {
+        // Fallback to station_units (legacy)
+        $st2 = $conn->prepare("SELECT hospital_name FROM station_units WHERE unit_id = ? LIMIT 1");
+        $st2->bind_param("s", $unitId);
+        $st2->execute();
+        $row2 = $st2->get_result()->fetch_assoc();
+        $st2->close();
+        if ($row2) $hospitalName = $row2['hospital_name'];
     }
-    return 'UNIT';
 }
 
-if (empty($unit_id)) {
-    // Fallback: generic format
+if (empty($hospitalName)) {
     echo json_encode(["next_id" => "KDH-$currentYear-0001"]);
     $conn->close();
     exit();
 }
 
-$hospCode = extractHospCode($unit_id);
+// --- 2. Generate hospital code abbreviation ---
+function hospitalCode(string $name): string
+{
+    // Strip "Hospital " prefix
+    $stripped = preg_replace('/^Hospital\s+/i', '', $name);
+    // Take first letter of each word
+    $words = preg_split('/\s+/', trim($stripped));
+    $code  = '';
+    foreach ($words as $w) {
+        if (!empty($w)) $code .= strtoupper($w[0]);
+    }
+    // Ensure at least 2 chars
+    return strlen($code) >= 2 ? $code : strtoupper(substr($stripped, 0, 3));
+}
 
-// Pattern matches IDs like "HSB-26-%" for this hospital+year
-$prefix = "$hospCode-$currentYear-";
-$pattern = "$prefix%";
+$hospCode = hospitalCode($hospitalName);
+$prefix   = "$hospCode-$currentYear-";
 
-// Count existing records for this unit in this year for a reliable sequence
+// --- 3. Count ALL patients in this hospital for this year (shared counter) ---
 $stmt = $conn->prepare(
     "SELECT COUNT(*) AS cnt
      FROM patients
-     WHERE unit_id = ? AND YEAR(recorded_at) = YEAR(CURDATE())"
+     WHERE hospital_name = ? AND YEAR(recorded_at) = YEAR(CURDATE())"
 );
-$stmt->bind_param("s", $unit_id);
+$stmt->bind_param("s", $hospitalName);
 $stmt->execute();
-$row = $stmt->get_result()->fetch_assoc();
+$row     = $stmt->get_result()->fetch_assoc();
 $nextSeq = ((int)$row['cnt']) + 1;
 $stmt->close();
 
-// Double-check: also ensure the generated ID isn't already taken (race condition safety)
-$nextId = $prefix . str_pad($nextSeq, 4, "0", STR_PAD_LEFT);
-$checkStmt = $conn->prepare("SELECT id FROM patients WHERE patient_id = ? LIMIT 1");
-$checkStmt->bind_param("s", $nextId);
-$checkStmt->execute();
-$exists = $checkStmt->get_result()->num_rows > 0;
-$checkStmt->close();
+// --- 4. Collision check ---
+$nextId   = $prefix . str_pad($nextSeq, 4, "0", STR_PAD_LEFT);
+$chkStmt  = $conn->prepare("SELECT id FROM patients WHERE patient_id = ? LIMIT 1");
+$chkStmt->bind_param("s", $nextId);
+$chkStmt->execute();
+$exists = $chkStmt->get_result()->num_rows > 0;
+$chkStmt->close();
 
-// If collision, increment until clear
 while ($exists) {
     $nextSeq++;
-    $nextId = $prefix . str_pad($nextSeq, 4, "0", STR_PAD_LEFT);
-    $checkStmt = $conn->prepare("SELECT id FROM patients WHERE patient_id = ? LIMIT 1");
-    $checkStmt->bind_param("s", $nextId);
-    $checkStmt->execute();
-    $exists = $checkStmt->get_result()->num_rows > 0;
-    $checkStmt->close();
+    $nextId  = $prefix . str_pad($nextSeq, 4, "0", STR_PAD_LEFT);
+    $chkStmt = $conn->prepare("SELECT id FROM patients WHERE patient_id = ? LIMIT 1");
+    $chkStmt->bind_param("s", $nextId);
+    $chkStmt->execute();
+    $exists = $chkStmt->get_result()->num_rows > 0;
+    $chkStmt->close();
 }
 
 echo json_encode(["next_id" => $nextId]);
-
 $conn->close();
 ?>

@@ -1,22 +1,15 @@
 <?php
 /**
  * get_recent_patient.php
- * Returns the most recently admitted patient for the logged-in unit.
+ * Returns the most recently admitted patient scoped strictly to the doctor's HOSPITAL.
+ * Doctors from other hospitals will NEVER see this hospital's most recent patient.
  *
- * Query params:
- *   ?unit_id=KDH-HSB-01  (required — scopes to this unit)
+ * Query params (provide one):
+ *   ?hospital_name=Hospital+Sultanah+Bahiyah
+ *   ?unit_id=dr.ahmad   (resolved to hospital_name via doctors table)
  *
- * Example response:
- *   {
- *     "status": "success",
- *     "data": {
- *       "patient_id":  "KDH-ER-26-0006",
- *       "species":     "Non-venomous Snake",
- *       "severity":    "LOW",
- *       "disposition": "Discharge",
- *       "recorded_at": "2026-02-22 20:00:00"
- *     }
- *   }
+ * Returns {"status":"empty"} if hospital cannot be determined — never returns
+ * records from a different hospital.
  */
 
 header("Access-Control-Allow-Origin: *");
@@ -25,49 +18,68 @@ header("Content-Type: application/json");
 
 require_once 'db_connect.php';
 
-$unit_id = isset($_GET['unit_id']) ? trim($_GET['unit_id']) : '';
+$hospitalName = isset($_GET['hospital_name']) ? trim($_GET['hospital_name']) : '';
+$unitId       = isset($_GET['unit_id'])       ? trim($_GET['unit_id'])       : '';
 
-if (!empty($unit_id)) {
-    $stmt = $conn->prepare(
-        "SELECT patient_id,
-                species_identified  AS species,
-                severity_level      AS severity,
-                final_disposition   AS disposition,
-                recorded_at
-         FROM patients
-         WHERE unit_id = ?
-         ORDER BY id DESC
-         LIMIT 1"
-    );
-    $stmt->bind_param("s", $unit_id);
-}
-else {
-    // Fallback: no unit filter (shows most recent overall)
-    $stmt = $conn->prepare(
-        "SELECT patient_id,
-                species_identified  AS species,
-                severity_level      AS severity,
-                final_disposition   AS disposition,
-                recorded_at
-         FROM patients
-         ORDER BY id DESC
-         LIMIT 1"
-    );
+// Resolve hospital from username / unit_id if not passed directly
+if (empty($hospitalName) && !empty($unitId)) {
+    // Try doctors table first (new auth system)
+    $st = $conn->prepare("SELECT hospital_name FROM doctors WHERE username = ? LIMIT 1");
+    $st->bind_param("s", $unitId);
+    $st->execute();
+    $row = $st->get_result()->fetch_assoc();
+    $st->close();
+    if ($row) {
+        $hospitalName = $row['hospital_name'];
+    } else {
+        // Fallback: legacy station_units table
+        $st2 = $conn->prepare("SELECT hospital_name FROM station_units WHERE unit_id = ? LIMIT 1");
+        $st2->bind_param("s", $unitId);
+        $st2->execute();
+        $row2 = $st2->get_result()->fetch_assoc();
+        $st2->close();
+        if ($row2) $hospitalName = $row2['hospital_name'];
+    }
 }
 
+// STRICT: if we still cannot determine the hospital, return empty — never leak other hospitals' data
+if (empty($hospitalName)) {
+    echo json_encode([
+        "status"  => "empty",
+        "message" => "Hospital scope could not be determined",
+    ]);
+    $conn->close();
+    exit();
+}
+
+// Fetch the most recent patient for THIS hospital only
+$stmt = $conn->prepare(
+    "SELECT patient_id,
+            species_identified  AS species,
+            severity_level      AS severity,
+            final_disposition   AS disposition,
+            ic_passport,
+            diagnosed_by,
+            hospital_name,
+            recorded_at
+     FROM patients
+     WHERE hospital_name = ?
+     ORDER BY id DESC
+     LIMIT 1"
+);
+$stmt->bind_param("s", $hospitalName);
 $stmt->execute();
 $result = $stmt->get_result();
 
 if ($result && $result->num_rows > 0) {
     echo json_encode([
         "status" => "success",
-        "data" => $result->fetch_assoc(),
+        "data"   => $result->fetch_assoc(),
     ]);
-}
-else {
+} else {
     echo json_encode([
-        "status" => "empty",
-        "message" => "No patient records found",
+        "status"  => "empty",
+        "message" => "No patient records found for $hospitalName",
     ]);
 }
 

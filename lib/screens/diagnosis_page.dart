@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:snake_bite_resq/screens/diagnosis_result_page.dart';
 import 'package:snake_bite_resq/services/api_service.dart';
+import 'package:snake_bite_resq/services/auth_service.dart';
 import 'package:snake_bite_resq/logic/diagnosis_logic.dart';
 import 'package:snake_bite_resq/utils/responsive_utils.dart';
 
@@ -15,6 +17,7 @@ class DiagnosisPage extends StatefulWidget {
 class _DiagnosisPageState extends State<DiagnosisPage> {
   // --- STATE VARIABLES ---
   final TextEditingController _patientIdController = TextEditingController();
+  final TextEditingController _icPassportController = TextEditingController();
   DateTime _biteTime = DateTime.now().subtract(const Duration(minutes: 45));
   Timer? _timer;
   String _durationSinceBite = "00h 00m";
@@ -52,7 +55,11 @@ class _DiagnosisPageState extends State<DiagnosisPage> {
   }
 
   Future<void> _fetchNextId() async {
-    String nextId = await ApiService.getNextPatientId();
+    final auth = Provider.of<AuthService>(context, listen: false);
+    final String nextId = await ApiService.getNextPatientId(
+      hospitalName: auth.hospitalName,
+      unitId: auth.unitId,
+    );
     setState(() {
       _patientIdController.text = nextId;
     });
@@ -62,6 +69,7 @@ class _DiagnosisPageState extends State<DiagnosisPage> {
   void dispose() {
     _timer?.cancel();
     _patientIdController.dispose();
+    _icPassportController.dispose();
     super.dispose();
   }
 
@@ -239,6 +247,7 @@ class _DiagnosisPageState extends State<DiagnosisPage> {
                           onTap: () {
                             final messenger = ScaffoldMessenger.of(context);
                             final navigator = Navigator.of(context);
+                            final auth = Provider.of<AuthService>(context, listen: false);
                             final outcome = DiagnosisLogic.evaluate(
                               snakeIdentified: _snakeIdentified,
                               identifiedSpecies: _identifiedSpecies,
@@ -270,6 +279,9 @@ class _DiagnosisPageState extends State<DiagnosisPage> {
                                   MaterialPageRoute(
                                     builder: (context) => DiagnosisResultPage(
                                       patientId: _patientIdController.text,
+                                      icPassport: _icPassportController.text.trim(),
+                                      diagnosedBy: auth.fullName ?? auth.username ?? 'Unknown',
+                                      hospitalName: auth.hospitalName ?? '',
                                       outcome: outcome,
                                     ),
                                   ),
@@ -327,6 +339,7 @@ class _DiagnosisPageState extends State<DiagnosisPage> {
       _bleeding = null;
       _bruises = null;
       _neostigmine = null;
+      _icPassportController.clear();
     });
   }
 
@@ -403,7 +416,7 @@ class _DiagnosisPageState extends State<DiagnosisPage> {
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.05),
+            color: Colors.grey.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 5),
           ),
@@ -444,7 +457,7 @@ class _DiagnosisPageState extends State<DiagnosisPage> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     filled: true,
-                    fillColor: Colors.teal.withOpacity(0.05),
+                    fillColor: Colors.teal.withValues(alpha: 0.05),
                     isDense: true,
                     contentPadding: const EdgeInsets.symmetric(
                       vertical: 16,
@@ -511,7 +524,52 @@ class _DiagnosisPageState extends State<DiagnosisPage> {
             ],
           ),
           const SizedBox(height: 10),
-          // Row 2: Timer (full width)
+          // Row 2: IC / Passport Number
+          TextField(
+            controller: _icPassportController,
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: Colors.blueGrey.shade800,
+              fontSize: r.adapt(phone: 14.0, tablet: 17.0),
+            ),
+            keyboardType: TextInputType.text,
+            textInputAction: TextInputAction.done,
+            decoration: InputDecoration(
+              labelText: "PATIENT IC / PASSPORT NO.",
+              labelStyle: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: r.fontXs,
+                color: Colors.blueGrey.shade500,
+              ),
+              hintText: "e.g. 970101-01-1234",
+              hintStyle: TextStyle(color: Colors.blueGrey.shade300, fontSize: 12),
+              prefixIcon: Icon(
+                Icons.badge_outlined,
+                color: Colors.indigo.shade400,
+                size: 20,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.blueGrey.shade200),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.indigo.shade400, width: 2),
+              ),
+              filled: true,
+              fillColor: Colors.indigo.withValues(alpha: 0.03),
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(
+                vertical: 14,
+                horizontal: 12,
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          // Row 3: Timer (full width)
           InkWell(
             onTap: () => _selectBiteTime(context),
             borderRadius: BorderRadius.circular(12),
