@@ -66,10 +66,3 @@ Contributions are welcome! Please open issues or pull requests for any improveme
 
 ---
 
-## About
-
-Snake Bite ResQ leverages a diverse technology stack (Dart, PHP, C++, CMake, Python, Swift) to deliver a robust cross-platform solution for urgent snake bite response. Our mission is to empower individuals and communities with the knowledge and tools they need to act quickly and effectively during snake bite emergencies.
-
----
-
-*Maintained by [andulu6969](https://github.com/andulu6969).*
